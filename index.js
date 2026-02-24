@@ -1,10 +1,10 @@
 const { Client, GatewayIntentBits, Partials, Collection, PermissionFlagsBits, ActivityType } = require('discord.js');
 require('dotenv').config();
-const fs = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
 const logger = require('./logger');
 const config = require('./config.json');
-const db = require('./db');
+const db     = require('./db');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -22,31 +22,30 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-client.config = config;
-client.commands = new Collection();
+client.config    = config;
+client.commands  = new Collection();
 client.cooldowns = new Collection();
 
 client.stats = {
   commandsExecuted: 0,
-  errors: 0,
-  startTime: Date.now(),
-  commandUsage: {}
+  errors:           0,
+  startTime:        Date.now(),
+  commandUsage:     {}
 };
 
-// Load all commands from /commands folder
+// ── Load commands from /commands folder ───────────────────────────────────────
 const commandsPath = path.join(__dirname, 'commands');
 if (!fs.existsSync(commandsPath)) fs.mkdirSync(commandsPath, { recursive: true });
 
-let loadedCount = 0;
+let fileLoadedCount = 0;
 
-// 1. Load file-based commands
 for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
   try {
     const cmd = require(path.join(commandsPath, file));
     if (cmd?.data?.name && typeof cmd.execute === 'function') {
       client.commands.set(cmd.data.name, cmd);
       client.stats.commandUsage[cmd.data.name] = 0;
-      loadedCount++;
+      fileLoadedCount++;
     } else {
       logger.warn(`Command file ${file} is missing data.name or execute`);
     }
@@ -55,49 +54,76 @@ for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) 
   }
 }
 
-// 2. Load dashboard-created commands from MongoDB
-(async () => {
+logger.info(`📁 Loaded ${fileLoadedCount} file-based commands`);
+
+// ── Load dashboard commands from MongoDB ─────────────────────────────────────
+// FIX: expose a promise so we can await it before the bot is considered "ready"
+//      to avoid the race condition where commands arrive after the first interaction.
+let dbCommandsReady = false;
+
+const dbLoadPromise = (async () => {
   try {
     await db.connect();
     const dbCmds = await db.getAllCommands();
     let dbCount = 0;
+
     for (const record of dbCmds) {
       if (record.source !== 'dashboard' || !record.code) continue;
       if (client.commands.has(record.name)) continue; // file version takes priority
+
       try {
         const Module = require('module');
-        const m = new Module('');
-        m.filename = path.join(commandsPath, `${record.name}.js`);
-        m.paths = Module._nodeModulePaths(commandsPath);
+        const m      = new Module('');
+        m.filename   = path.join(commandsPath, `${record.name}.js`);
+        m.paths      = Module._nodeModulePaths(commandsPath);
         m._compile(record.code, `${record.name}.js`);
         const cmd = m.exports;
+
         if (cmd?.data?.name && typeof cmd.execute === 'function') {
           client.commands.set(cmd.data.name, cmd);
           client.stats.commandUsage[cmd.data.name] = 0;
           dbCount++;
-          loadedCount++;
         }
       } catch (e) {
         logger.warn(`Failed to load DB command ${record.name}: ${e.message}`);
       }
     }
+
     logger.info(`📦 Loaded ${dbCount} dashboard commands from MongoDB`);
+    dbCommandsReady = true;
+    return dbCount;
   } catch (e) {
     logger.error(`MongoDB load failed: ${e.message} — continuing with file commands only`);
+    dbCommandsReady = true; // unblock interactions even on DB failure
+    return 0;
   }
 })();
 
-// Set bot status with command count
+// ── Ready ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   logger.info(`✅ Logged in as ${client.user.tag}`);
-  logger.info(`📊 Loaded ${loadedCount} commands: ${Array.from(client.commands.keys()).join(', ')}`);
   logger.info(`🌐 Serving ${client.guilds.cache.size} guild(s)`);
 
-  client.user.setActivity(`${loadedCount} commands | /help`, { type: ActivityType.Watching });
+  // FIX: wait for DB commands to finish loading before announcing / setting status
+  //      so the command count in the status is accurate and all commands are
+  //      available to handle the very first interaction after startup.
+  await dbLoadPromise;
+
+  const totalLoaded = client.commands.size;
+  logger.info(`📊 Total commands ready: ${totalLoaded} — ${Array.from(client.commands.keys()).join(', ')}`);
+
+  client.user.setActivity(`${totalLoaded} commands | /help`, { type: ActivityType.Watching });
 });
 
+// ── Interaction handler ───────────────────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
+
+  // FIX: if DB hasn't finished loading yet (very fast first interaction),
+  //      wait for it rather than silently ignoring DB-sourced commands.
+  if (!dbCommandsReady) {
+    await dbLoadPromise;
+  }
 
   // Guild restriction
   if (Array.isArray(config.allowedGuilds) && config.allowedGuilds.length > 0 && !config.allowedGuilds.includes(interaction.guildId)) {
@@ -117,8 +143,8 @@ client.on('interactionCreate', async interaction => {
       cooldowns.set(command.data.name, new Collection());
     }
 
-    const now = Date.now();
-    const timestamps = cooldowns.get(command.data.name);
+    const now            = Date.now();
+    const timestamps     = cooldowns.get(command.data.name);
     const cooldownAmount = (command.cooldown || 3) * 1000;
 
     if (timestamps.has(interaction.user.id)) {
@@ -140,7 +166,7 @@ client.on('interactionCreate', async interaction => {
   const requiredRoleId = config.commandRoleId || process.env.COMMAND_ROLE_ID || '';
   if (requiredRoleId) {
     try {
-      const member = interaction.member;
+      const member  = interaction.member;
       const isAdmin = member.permissions?.has?.(PermissionFlagsBits.Administrator);
       const hasRole = member.roles?.cache?.has?.(requiredRoleId);
       if (!isAdmin && !hasRole) {
@@ -161,7 +187,7 @@ client.on('interactionCreate', async interaction => {
     await command.execute(interaction, client, logger);
 
     client.stats.commandsExecuted++;
-    client.stats.commandUsage[command.data.name]++;
+    client.stats.commandUsage[command.data.name] = (client.stats.commandUsage[command.data.name] || 0) + 1;
     db.incrementUsage(interaction.commandName).catch(() => {});
 
     logger.info(`✅ ${interaction.user.tag} used /${interaction.commandName} in ${interaction.guild?.name || 'DM'}`);
@@ -185,7 +211,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Log when bot joins/leaves guilds
+// ── Guild join/leave logging ──────────────────────────────────────────────────
 client.on('guildCreate', guild => {
   logger.info(`✨ Joined new guild: ${guild.name} (${guild.id}) - ${guild.memberCount} members`);
 });
@@ -194,6 +220,7 @@ client.on('guildDelete', guild => {
   logger.info(`👋 Left guild: ${guild.name} (${guild.id})`);
 });
 
+// ── Process-level error handlers ─────────────────────────────────────────────
 process.on('unhandledRejection', (err) => {
   logger.error(`UnhandledRejection: ${err}`);
 });
@@ -204,6 +231,7 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+// ── Login ─────────────────────────────────────────────────────────────────────
 client.login(token).catch(err => {
   logger.error(`Failed to login: ${err}`);
   process.exit(1);

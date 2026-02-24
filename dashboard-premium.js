@@ -162,13 +162,11 @@ app.delete('/api/commands/:name', auth, async (req, res) => {
     const cmd = await db.getCommand(req.params.name);
     if (!cmd) return res.status(404).json({ error: 'Not found' });
 
-    // Remove from file system if exists
     const fp = path.join(CMD_DIR, `${req.params.name}.js`);
     if (fs.existsSync(fp)) fs.unlinkSync(fp);
 
     await db.deleteCommand(req.params.name);
 
-    // Unregister from Discord
     if (TOKEN && CLIENT_ID && GUILD_IDS.length) {
       try {
         const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -200,7 +198,6 @@ app.post('/api/flow/deploy', auth, async (req, res) => {
   if (!CLIENT_ID) return res.status(400).json({ error: 'CLIENT_ID missing in .env' });
   if (!GUILD_IDS.length) return res.status(400).json({ error: 'GUILD_IDS missing in .env' });
 
-  // Validate generated code
   let cmdModule;
   try { cmdModule = loadModuleFromString(code); }
   catch (e) { return res.status(400).json({ error: `Code syntax error: ${e.message}` }); }
@@ -210,7 +207,6 @@ app.post('/api/flow/deploy', auth, async (req, res) => {
   const cmdJson = cmdModule.data.toJSON();
 
   try {
-    // 1. Register to Discord (no file system needed!)
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     const results = [];
     for (const gid of GUILD_IDS) {
@@ -222,7 +218,6 @@ app.post('/api/flow/deploy', auth, async (req, res) => {
       results.push({ guild: gid, id: discordCmd.id, action: match ? 'updated' : 'created' });
     }
 
-    // 2. Save to MongoDB
     await db.upsertCommand(name, {
       name,
       description: flow.commandDesc || cmdJson.description || 'No description',
@@ -233,7 +228,6 @@ app.post('/api/flow/deploy', auth, async (req, res) => {
       registeredAt: new Date(),
     });
 
-    // 3. Also write .js file so bot's require() can load it at runtime
     if (!fs.existsSync(CMD_DIR)) fs.mkdirSync(CMD_DIR, { recursive: true });
     fs.writeFileSync(path.join(CMD_DIR, `${name}.js`), code, 'utf8');
 
@@ -260,7 +254,6 @@ app.post('/api/sync', auth, async (_req, res) => {
 
   await db.syncFileCommands(loaded);
 
-  // Register ALL commands (file + dashboard) to Discord
   const results = { guilds: [], errors: [] };
   if (TOKEN && CLIENT_ID && GUILD_IDS.length) {
     try {
@@ -339,8 +332,120 @@ function buildConditions(conditions) {
   }).filter(Boolean).join('\n\n');
 }
 
+// ── Modal form code generator ─────────────────────────────────────────────────
+function buildModalFormAction(a, ind = '    ') {
+  const buttonLabel   = a.buttonLabel   || '📋 Open Form';
+  const buttonStyle   = ['Primary','Secondary','Success','Danger'].includes(a.buttonStyle) ? a.buttonStyle : 'Primary';
+  const modalTitle    = a.modalTitle    || 'Fill Out Form';
+  const responseCh    = a.responseChannel || '';
+  const useEmbed      = a.responseEmbed !== false;
+  const fields        = (a.modalFields  || []).filter(f => f.label);
+  // Use fixed IDs based on command name so they survive bot restarts
+  const modalId       = `modal_form_submit`;
+  const btnId         = `modal_form_open`;
+
+  // Build field definitions (used inside the interactionCreate handler)
+  const fieldDefs = fields.map((f, i) => {
+    const style = f.style === 'paragraph' ? 'TextInputStyle.Paragraph' : 'TextInputStyle.Short';
+    return `    const field${i} = new TextInputBuilder()
+      .setCustomId(${j(`field_${i}`)})
+      .setLabel(${j(f.label)})
+      .setPlaceholder(${j(f.placeholder || '')})
+      .setStyle(${style})
+      .setRequired(${!!f.required});`;
+  }).join('\n');
+
+  const fieldRows = fields.map((_, i) =>
+    `    modal.addComponents(new ActionRowBuilder().addComponents(field${i}));`
+  ).join('\n');
+
+  // Build response code (runs after modal submit)
+  let responseCode;
+  if (useEmbed) {
+    const fieldLines = fields.map((f, i) =>
+      `        { name: ${j(f.label)}, value: i.fields.getTextInputValue(${j(`field_${i}`)}), inline: true }`
+    ).join(',\n');
+    responseCode = `      const resEmbed = new EmbedBuilder()
+        .setTitle('📋 New Form Submission')
+        .addFields(
+${fieldLines},
+          { name: 'Submitted By', value: \`\${i.user.tag} (<@\${i.user.id}>)\`, inline: false },
+          { name: 'Submitted At', value: \`<t:\${Math.floor(Date.now()/1000)}:F>\`, inline: false }
+        )
+        .setColor('#2dd4a0')
+        .setThumbnail(i.user.displayAvatarURL());
+      await targetCh.send({ embeds: [resEmbed] });`;
+  } else {
+    const fieldLines = fields.map((f, idx) =>
+      `**${f.label}:** \${i.fields.getTextInputValue(${j(`field_${idx}`)})}`
+    ).join('\\n');
+    responseCode = `      await targetCh.send(\`📋 **New Submission** from \${i.user.tag}\\n${fieldLines}\`);`;
+  }
+
+  const targetChCode = responseCh
+    ? `i.guild?.channels?.cache?.find(c => c.name === ${j(responseCh)} || c.id === ${j(responseCh)})`
+    : `i.channel`;
+
+  return `
+${ind}// ── Modal Form ──────────────────────────────────────────────────────────
+${ind}// Step 1: Reply with the button
+${ind}const formBtn = new ButtonBuilder()
+${ind}  .setCustomId(${j(btnId)})
+${ind}  .setLabel(${j(buttonLabel)})
+${ind}  .setStyle(ButtonStyle.${buttonStyle});
+${ind}await interaction.reply({
+${ind}  content: 'Click the button below to open the form.',
+${ind}  components: [new ActionRowBuilder().addComponents(formBtn)]
+${ind}});
+
+${ind}// Step 2: Listen for button click via client interactionCreate
+${ind}// (showModal MUST be called as a direct response — collectors are too slow)
+${ind}const _formHandler = async i => {
+${ind}  if (!i.isButton() || i.customId !== ${j(btnId)}) return;
+
+${ind}  // Build and show the modal immediately as the direct response
+${ind}  const modal = new ModalBuilder()
+${ind}    .setCustomId(${j(modalId)})
+${ind}    .setTitle(${j(modalTitle)});
+${fieldDefs}
+${fieldRows}
+${ind}  await i.showModal(modal);
+${ind}};
+
+${ind}const _submitHandler = async i => {
+${ind}  if (!i.isModalSubmit() || i.customId !== ${j(modalId)}) return;
+${ind}  try {
+${ind}    await i.deferReply({ ephemeral: true });
+${ind}    const targetCh = ${targetChCode};
+${ind}    if (!targetCh) {
+${ind}      await i.editReply({ content: '⚠️ Response channel not found. Contact an admin.' });
+${ind}      return;
+${ind}    }
+${responseCode}
+${ind}    await i.editReply({ content: '✅ Form submitted successfully!' });
+${ind}  } catch (err) {
+${ind}    _logger?.error?.('Modal submit error: ' + err.message);
+${ind}    await i.editReply({ content: '⚠️ Something went wrong submitting the form.' }).catch(() => {});
+${ind}  }
+${ind}};
+
+${ind}_client.on('interactionCreate', _formHandler);
+${ind}_client.on('interactionCreate', _submitHandler);
+
+${ind}// Clean up listeners after 10 minutes
+${ind}setTimeout(() => {
+${ind}  _client.off('interactionCreate', _formHandler);
+${ind}  _client.off('interactionCreate', _submitHandler);
+${ind}  interaction.editReply({
+${ind}    content: '⏱️ This form has expired.',
+${ind}    components: []
+${ind}  }).catch(() => {});
+${ind}}, 10 * 60 * 1000);`;
+}
+
 function buildActions(actions, ind = '    ') {
   return actions.map(a => {
+    if (a.type === 'modal_form') return buildModalFormAction(a, ind);
     const eph = a.ephemeral ? ', ephemeral: true' : '';
     switch (a.type) {
       case 'reply_text':   return `${ind}await interaction.reply({ content: ${j(a.content || '')}${eph} });`;
@@ -370,7 +475,14 @@ function generateFlowCode(flow) {
 }
 
 function genSlash(name, desc, trigger, conditions, actions) {
-  const imp    = needsEmbed(actions) ? 'SlashCommandBuilder, EmbedBuilder' : 'SlashCommandBuilder';
+  // Determine which imports are needed
+  const hasModal   = actions.some(a => a.type === 'modal_form');
+  const hasEmbed   = needsEmbed(actions);
+
+  const imports = ['SlashCommandBuilder'];
+  if (hasEmbed || hasModal) imports.push('EmbedBuilder');
+  if (hasModal) imports.push('ActionRowBuilder', 'ButtonBuilder', 'ButtonStyle', 'ModalBuilder', 'TextInputBuilder', 'TextInputStyle');
+
   const opts   = (trigger.options || []).filter(o => sanitizeName(o.name));
   const optLines = opts.map(o => {
     const n = j(sanitizeName(o.name)), d = j(o.description || o.name);
@@ -385,10 +497,12 @@ function genSlash(name, desc, trigger, conditions, actions) {
       default: return '';
     }
   }).filter(Boolean).join('\n');
+
   const cond = buildConditions(conditions);
   const act  = buildActions(actions);
   const cool = parseInt(trigger.cooldown, 10) || 3;
-  return `const { ${imp} } = require('discord.js');
+
+  return `const { ${imports.join(', ')} } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()

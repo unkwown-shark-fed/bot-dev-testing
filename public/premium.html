@@ -153,6 +153,7 @@ input[type=color] { cursor: pointer; }
 .mcard-act  { border-left: 3px solid var(--act); }
 .mcard-opt  { border-left: 3px solid var(--blu); }
 .mcard-btn  { border-left: 3px solid var(--pnk); }
+.mcard-modal { border-left: 3px solid var(--yel); }
 .mcard-hd   { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .mcard-hd .mtitle { font-size: 10px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: .05em; }
 .xbtn { background: none; border: none; color: var(--t3); font-size: 18px; line-height: 1; padding: 0 2px; transition: color .15s; }
@@ -172,6 +173,13 @@ input[type=color] { cursor: pointer; }
 /* Action type selector row */
 .add-row { display: flex; gap: 8px; }
 .add-row .fsel { flex: 1; }
+
+/* Modal field sub-cards */
+.mfield-card {
+  background: var(--bg4); border: 1px solid var(--line2); border-radius: 8px;
+  padding: 10px; margin-bottom: 8px;
+}
+.mfield-card:last-child { margin-bottom: 0; }
 
 /* ── CANVAS (middle) ────────────────────────────────────────────────────── */
 .canvas-wrap {
@@ -208,6 +216,8 @@ input[type=color] { cursor: pointer; }
 .fn-cond .fnode-hd { background: linear-gradient(120deg, #7a4a00, #f0a030); }
 .fn-act  .fnode-hd { background: linear-gradient(120deg, #0b4a32, #2dd4a0); color: #000; }
 .fn-act  .fnode-hd .ntype { opacity: .45; }
+.fn-modal .fnode-hd { background: linear-gradient(120deg, #6a4a00, #f0c060); color: #000; }
+.fn-modal .fnode-hd .ntype { opacity: .45; }
 .farrow { width: 2px; height: 36px; background: linear-gradient(to bottom, var(--line2), var(--line)); margin: 0 auto; position: relative; flex-shrink: 0; }
 .farrow::after { content: '▾'; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); color: var(--line2); font-size: 11px; }
 
@@ -448,6 +458,7 @@ input[type=color] { cursor: pointer; }
             <option value="followup_embed">➕ Follow-up — Embed</option>
             <option value="send_to_channel">📤 Send to Channel — Text</option>
             <option value="send_embed_to_channel">📤 Send to Channel — Embed</option>
+            <option value="modal_form">📝 Modal Form (Button → Popup → Channel)</option>
           </select>
           <button class="sbtn pri" onclick="addAct()">＋ Add</button>
         </div>
@@ -502,7 +513,7 @@ input[type=color] { cursor: pointer; }
     </div>
   </div>
 
-  <!-- ── COMMANDS (legacy file view) ────────────────────────────────────────── -->
+  <!-- ── COMMANDS (file view) ────────────────────────────────────────────── -->
   <div class="pg" id="pg-commands">
     <div class="pg-scroll">
       <h1 class="pg-title">Commands</h1>
@@ -557,17 +568,17 @@ input[type=color] { cursor: pointer; }
 
 // ── STATE ───────────────────────────────────────────────────────────────────
 let TOK   = localStorage.getItem('bst');
-let opts  = [];   // slash options
-let btns  = [];   // buttons (button trigger)
-let conds = [];   // conditions
-let acts  = [];   // actions
+let opts  = [];
+let btns  = [];
+let conds = [];
+let acts  = [];
 let pTimer = null;
 
 // ── NAME SANITIZER ───────────────────────────────────────────────────────────
 function sanitizeCmdName(input) {
-  const raw      = input.value;
-  const safe     = raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').slice(0, 32);
-  const hint     = document.getElementById('cn-hint');
+  const raw  = input.value;
+  const safe = raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+  const hint = document.getElementById('cn-hint');
   if (!raw) { hint.textContent = ''; return; }
   if (safe !== raw) {
     hint.style.color = 'var(--yel)';
@@ -705,14 +716,10 @@ async function loadLibrary() {
     const { commands } = await api('/api/commands').then(r => r.json());
     if (!commands.length) { g.innerHTML = '<p style="color:var(--t2);padding:20px">No commands in database yet. Click <strong>Sync Files → DB</strong> to import your existing commands.</p>'; return; }
     g.innerHTML = commands.map(c => {
-      const srcBadge = c.source === 'dashboard'
-        ? `<span class="badge-db">dashboard</span>`
-        : `<span class="badge-file">file</span>`;
-      const regBadge = c.registered
-        ? `<span class="badge-ok">✓ registered</span>`
-        : `<span class="badge-warn">unregistered</span>`;
-      const usage = c.usageCount ? `${c.usageCount} uses` : 'never used';
-      const editBtn = c.source === 'dashboard' && c.flow
+      const srcBadge = c.source === 'dashboard' ? `<span class="badge-db">dashboard</span>` : `<span class="badge-file">file</span>`;
+      const regBadge = c.registered ? `<span class="badge-ok">✓ registered</span>` : `<span class="badge-warn">unregistered</span>`;
+      const usage    = c.usageCount ? `${c.usageCount} uses` : 'never used';
+      const editBtn  = c.source === 'dashboard' && c.flow
         ? `<button class="sbtn" onclick="loadFlowFromDB('${c.name}')">✏️ Edit</button>`
         : `<button class="sbtn" style="opacity:.4;cursor:not-allowed" title="File commands edited in code">✏️ Edit</button>`;
       return `
@@ -724,17 +731,40 @@ async function loadLibrary() {
         ${c.lastUsedAt ? `<span>⏱ Last: ${new Date(c.lastUsedAt).toLocaleDateString()}</span>` : ''}
         ${c.registeredAt ? `<span>🚀 Deployed: ${new Date(c.registeredAt).toLocaleDateString()}</span>` : ''}
       </div>
-      <div class="cmd-acts">
-        ${editBtn}
-        <button class="sbtn dng" onclick="delCmd('${c.name}')">🗑 Delete</button>
-      </div>
+      <div class="cmd-acts">${editBtn}<button class="sbtn dng" onclick="delCmd('${c.name}')">🗑 Delete</button></div>
     </div>`;
     }).join('');
   } catch(e) { g.innerHTML = `<p style="color:var(--red)">Error: ${esc(e.message)}</p>`; }
 }
 
-// load old file-based grid too (kept for compatibility)
-async function loadCmds() { loadLibrary(); }
+async function loadCmds() {
+  const g = document.getElementById('cmd-grid');
+  if (!g) return;
+  g.innerHTML = '<p style="color:var(--t2)">Loading…</p>';
+  try {
+    const { commands } = await api('/api/commands').then(r => r.json());
+    if (!commands.length) { g.innerHTML = '<p style="color:var(--t2)">No commands found. Use <strong>Sync Files → DB</strong> on the Library page first.</p>'; return; }
+    g.innerHTML = commands.map(c => {
+      const srcBadge = c.source === 'dashboard' ? `<span class="badge-db">dashboard</span>` : `<span class="badge-file">file</span>`;
+      const regBadge = c.registered ? `<span class="badge-ok">✓ registered</span>` : `<span class="badge-warn">unregistered</span>`;
+      const usage    = c.usageCount ? `${c.usageCount} uses` : 'never used';
+      const editBtn  = c.source === 'dashboard' && c.flow
+        ? `<button class="sbtn" onclick="loadFlowFromDB('${c.name}')">✏️ Edit</button>`
+        : `<button class="sbtn" style="opacity:.4;cursor:not-allowed" title="File commands edited in code">✏️ Edit</button>`;
+      return `
+      <div class="cmd-card">
+        <div class="cmd-name" style="display:flex;align-items:center;gap:8px">/${esc(c.name)} ${srcBadge} ${regBadge}</div>
+        <div class="cmd-desc">${esc(c.description || 'No description')}</div>
+        <div class="cmd-meta" style="display:flex;gap:12px;flex-wrap:wrap">
+          <span>📊 ${usage}</span>
+          ${c.lastUsedAt   ? `<span>⏱ Last: ${new Date(c.lastUsedAt).toLocaleDateString()}</span>` : ''}
+          ${c.registeredAt ? `<span>🚀 Deployed: ${new Date(c.registeredAt).toLocaleDateString()}</span>` : ''}
+        </div>
+        <div class="cmd-acts">${editBtn}<button class="sbtn dng" onclick="delCmd('${c.name}')">🗑 Delete</button></div>
+      </div>`;
+    }).join('');
+  } catch(e) { g.innerHTML = `<p style="color:var(--red)">Error: ${esc(e.message)}</p>`; }
+}
 
 async function loadCmdCode(name) {
   const { command } = await api(`/api/commands/${name}`).then(r => r.json());
@@ -750,17 +780,14 @@ async function loadFlowFromDB(name) {
   try {
     const { command } = await api(`/api/commands/${name}`).then(r => r.json());
     if (!command?.flow) { toast('No flow data for this command', 'err'); return; }
-    // Switch to builder tab
     const builderTab = document.querySelector('[onclick*="builder"]');
     if (builderTab) nav('builder', builderTab);
     toast(`Loading /${name} into builder…`, 'inf');
-    // Populate form from flow
     const f = command.flow;
     document.getElementById('cn').value = f.commandName || name;
     document.getElementById('cd').value = f.commandDesc || '';
     document.getElementById('ttype').value = f.trigger?.type || 'slash';
     onTrig();
-    // restore options/buttons/conditions/actions
     opts  = f.trigger?.options  || [];
     btns  = f.trigger?.buttons  || [];
     conds = f.conditions || [];
@@ -905,20 +932,62 @@ function renderConds() {
 
 // ── ACTIONS ────────────────────────────────────────────────────────────────────
 function addAct() {
-  acts.push({ id:Date.now(), type: document.getElementById('na-type').value, content:'',
-    ephemeral:false, embedTitle:'', embedDescription:'', embedColor:'#6c63ff',
-    embedFooter:'', embedImage:'', embedThumbnail:'', channel:'' });
+  const type = document.getElementById('na-type').value;
+  const base = {
+    id: Date.now(), type,
+    content:'', ephemeral:false,
+    embedTitle:'', embedDescription:'', embedColor:'#6c63ff',
+    embedFooter:'', embedImage:'', embedThumbnail:'', channel:''
+  };
+  // Modal-specific defaults
+  if (type === 'modal_form') {
+    base.modalTitle      = 'Fill Out Form';
+    base.buttonLabel     = '📋 Open Form';
+    base.buttonStyle     = 'Primary';
+    base.responseChannel = '';
+    base.responseEmbed   = true;
+    base.modalFields     = [
+      { id: Date.now() + 1, label: 'Full Name',  placeholder: 'Enter your full name',  style: 'short',     required: true  },
+      { id: Date.now() + 2, label: 'ID Number',  placeholder: 'Enter your ID number',  style: 'short',     required: true  }
+    ];
+  }
+  acts.push(base);
   renderActs();
 }
 function removeAct(id) { acts = acts.filter(a => a.id !== id); renderActs(); }
 function updAct(id, k, v) { const a = acts.find(x => x.id === id); if (a) { a[k] = v; preview(); } }
+
+// ── Modal field helpers ───────────────────────────────────────────────────────
+function addModalField(actId) {
+  const a = acts.find(x => x.id === actId);
+  if (!a || !a.modalFields) return;
+  if (a.modalFields.length >= 5) { toast('Discord allows max 5 fields per modal', 'err'); return; }
+  a.modalFields.push({ id: Date.now(), label: '', placeholder: '', style: 'short', required: true });
+  renderActs();
+}
+function removeModalField(actId, fieldId) {
+  const a = acts.find(x => x.id === actId);
+  if (!a) return;
+  a.modalFields = a.modalFields.filter(f => f.id !== fieldId);
+  renderActs();
+}
+function updModalField(actId, fieldId, k, v) {
+  const a = acts.find(x => x.id === actId);
+  if (!a) return;
+  const f = a.modalFields.find(x => x.id === fieldId);
+  if (f) { f[k] = v; preview(); }
+}
+
 const actLbl = {
   reply_text:'💬 Reply Text', reply_embed:'🎨 Reply Embed',
   followup_text:'➕ Follow-up Text', followup_embed:'➕ Follow-up Embed',
-  send_to_channel:'📤 Text to Channel', send_embed_to_channel:'📤 Embed to Channel'
+  send_to_channel:'📤 Text to Channel', send_embed_to_channel:'📤 Embed to Channel',
+  modal_form:'📝 Modal Form'
 };
+
 function renderActs() {
   document.getElementById('act-list').innerHTML = acts.map(a => {
+    if (a.type === 'modal_form') return renderModalAct(a);
     const isE  = a.type.includes('embed');
     const isCh = a.type.includes('to_channel');
     return `
@@ -947,6 +1016,61 @@ function renderActs() {
   }).join('');
 }
 
+function renderModalAct(a) {
+  const fieldsHtml = (a.modalFields || []).map(f => `
+    <div class="mfield-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase">Field</span>
+        <button class="xbtn" onclick="removeModalField(${a.id},${f.id})">×</button>
+      </div>
+      <div class="frow"><div class="flabel">Label</div>
+        <input class="finput" value="${esc(f.label)}" placeholder="Field label" oninput="updModalField(${a.id},${f.id},'label',this.value)"></div>
+      <div class="frow"><div class="flabel">Placeholder</div>
+        <input class="finput" value="${esc(f.placeholder)}" placeholder="e.g. Enter your name" oninput="updModalField(${a.id},${f.id},'placeholder',this.value)"></div>
+      <div class="frow"><div class="flabel">Input type</div>
+        <select class="fsel" onchange="updModalField(${a.id},${f.id},'style',this.value)">
+          <option value="short"${f.style==='short'?' selected':''}>Short (single line)</option>
+          <option value="paragraph"${f.style==='paragraph'?' selected':''}>Paragraph (multi-line)</option>
+        </select></div>
+      <label class="crow"><input type="checkbox" ${f.required?'checked':''} onchange="updModalField(${a.id},${f.id},'required',this.checked)"><label>Required</label></label>
+    </div>`).join('');
+
+  return `
+  <div class="mcard mcard-modal">
+    <div class="mcard-hd">
+      <span class="mtitle">📝 Modal Form</span>
+      <button class="xbtn" onclick="removeAct(${a.id})">×</button>
+    </div>
+
+    <div style="font-size:10px;color:var(--yel);margin-bottom:10px;padding:7px 10px;background:rgba(240,192,96,.07);border-radius:6px;border-left:3px solid var(--yel)">
+      Flow: User runs command → clicks button → modal popup opens → submits → response sent to channel
+    </div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Button</div>
+    <div class="frow"><div class="flabel">Button label</div>
+      <input class="finput" value="${esc(a.buttonLabel||'📋 Open Form')}" oninput="updAct(${a.id},'buttonLabel',this.value)"></div>
+    <div class="frow"><div class="flabel">Button style</div>
+      <select class="fsel" onchange="updAct(${a.id},'buttonStyle',this.value)">
+        ${['Primary','Secondary','Success','Danger'].map(s=>`<option value="${s}"${(a.buttonStyle||'Primary')===s?' selected':''}>${s}</option>`).join('')}
+      </select></div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;margin:12px 0 8px">Modal</div>
+    <div class="frow"><div class="flabel">Modal title</div>
+      <input class="finput" value="${esc(a.modalTitle||'Fill Out Form')}" oninput="updAct(${a.id},'modalTitle',this.value)"></div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;margin:12px 0 8px">
+      Form Fields <span style="color:var(--t3);font-weight:400">(max 5)</span>
+    </div>
+    ${fieldsHtml}
+    <button class="sbtn" style="margin-bottom:12px" onclick="addModalField(${a.id})">＋ Add Field</button>
+
+    <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;margin:4px 0 8px">Response</div>
+    <div class="frow"><div class="flabel">Send response to channel <span class="fsub">name or ID</span></div>
+      <input class="finput" value="${esc(a.responseChannel||'')}" placeholder="submissions" oninput="updAct(${a.id},'responseChannel',this.value)"></div>
+    <label class="crow"><input type="checkbox" ${a.responseEmbed!==false?'checked':''} onchange="updAct(${a.id},'responseEmbed',this.checked)"><label>Send response as embed</label></label>
+  </div>`;
+}
+
 // ── FLOW PREVIEW ──────────────────────────────────────────────────────────────
 function preview() {
   clearTimeout(pTimer);
@@ -954,7 +1078,7 @@ function preview() {
 }
 
 function _renderPreview() {
-  const name = document.getElementById('cn').value.trim();
+  const name   = document.getElementById('cn').value.trim();
   const canvas = document.getElementById('canvas');
   const empty  = document.getElementById('c-empty');
   canvas.querySelectorAll('.fnode,.farrow').forEach(e => e.remove());
@@ -964,7 +1088,6 @@ function _renderPreview() {
   const ttype = document.getElementById('ttype').value;
   const nodes = [];
 
-  // Trigger node
   const tIcons = { slash:'⚡', button:'🔘', keyword:'💬' };
   const tNames = { slash:'Slash Command', button:'Button Click', keyword:'Keyword Match' };
   const tFields = [{ k:'Command', v: `/${name}` }];
@@ -981,15 +1104,22 @@ function _renderPreview() {
   }
   nodes.push({ cls:'fn-trig', icon: tIcons[ttype], name: tNames[ttype], type:'trigger', fields: tFields });
 
-  // Condition nodes
   conds.forEach(c => {
     const ln = { has_role:'👤 Has Role', missing_role:'🚫 Missing Role', in_channel:'📍 In Channel', is_admin:'🛡 Is Admin' };
     const f  = c.value ? [{ k:'Value', v: c.value }] : [];
     nodes.push({ cls:'fn-cond', icon:'⚙️', name: ln[c.type]||c.type, type:'condition', fields: f });
   });
 
-  // Action nodes
   acts.forEach(a => {
+    if (a.type === 'modal_form') {
+      const f = [];
+      if (a.buttonLabel)     f.push({ k:'Button',   v: a.buttonLabel });
+      if (a.modalTitle)      f.push({ k:'Modal',    v: a.modalTitle });
+      if (a.modalFields?.length) f.push({ k:'Fields',  v: a.modalFields.map(x=>x.label||'?').join(', ') });
+      if (a.responseChannel) f.push({ k:'→ Channel', v: a.responseChannel });
+      nodes.push({ cls:'fn-modal', icon:'📝', name:'Modal Form', type:'action', fields: f });
+      return;
+    }
     const f = [];
     if (a.type.includes('embed')) {
       if (a.embedTitle) f.push({ k:'Title', v: a.embedTitle });
@@ -1067,7 +1197,6 @@ async function deploy() {
   btn.disabled = true;
   btn.innerHTML = '<div class="spin"></div> Deploying…';
 
-  // Include the flow object so it can be re-edited later
   let flow = null;
   try { flow = buildFlow(); } catch(_) {}
 

@@ -9,13 +9,17 @@ module.exports = {
     .addBooleanOption(o => o.setName('bots_only').setDescription('Only delete bot messages').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
   cooldown: 10,
-  async execute(interaction) {
+
+  // FIX: accept logger as third param (passed by index.js); fall back to console if not provided
+  async execute(interaction, client, logger) {
+    const log = logger || console;
+
     // Permission check
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
       return interaction.reply({ content: '❌ You need the "Manage Messages" permission to use this command.', ephemeral: true });
     }
 
-    const amount = interaction.options.getInteger('amount');
+    const amount   = interaction.options.getInteger('amount');
     const targetUser = interaction.options.getUser('user');
     const botsOnly = interaction.options.getBoolean('bots_only') || false;
 
@@ -54,7 +58,7 @@ module.exports = {
       // Separate messages by age (Discord only allows bulk delete for messages < 14 days old)
       const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
       const bulkDeleteable = filtered.filter(m => m.createdTimestamp > twoWeeksAgo);
-      const tooOld = filtered.filter(m => m.createdTimestamp <= twoWeeksAgo);
+      const tooOld         = filtered.filter(m => m.createdTimestamp <= twoWeeksAgo);
 
       let deletedCount = 0;
 
@@ -64,33 +68,34 @@ module.exports = {
           const deleted = await channel.bulkDelete(bulkDeleteable, true);
           deletedCount += deleted.size;
         } catch (err) {
-          logger?.error?.(`Bulk delete failed: ${err.message}`);
+          // FIX: use the normalised logger, not the bare undefined `logger`
+          log.error(`Bulk delete failed: ${err.message}`);
         }
       }
 
       // Individually delete old messages
       if (tooOld.length > 0) {
         await interaction.editReply(`🔄 Deleting ${tooOld.length} old messages individually (this may take a while)...`);
-        
+
         for (const msg of tooOld) {
           try {
             await msg.delete();
             deletedCount++;
             await new Promise(r => setTimeout(r, 1000)); // Rate limit protection
           } catch (err) {
-            // Message might have been deleted already
+            // Message might have been deleted already — safe to ignore
           }
         }
       }
 
       let summary = `✅ Successfully deleted **${deletedCount}** message(s)`;
       if (targetUser) summary += ` from ${targetUser.tag}`;
-      if (botsOnly) summary += ' (bots only)';
+      if (botsOnly)   summary += ' (bots only)';
       summary += '.';
 
       await interaction.editReply(summary);
     } catch (err) {
-      console.error('Cleanup error:', err);
+      log.error(`Cleanup error: ${err.message || err}`);
       await interaction.editReply(`❌ Error during cleanup: ${err.message}`);
     }
   }

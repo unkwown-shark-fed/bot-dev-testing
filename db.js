@@ -80,13 +80,12 @@ async function incrementError(name) {
 }
 
 // Sync all file-based commands into DB
-// Uses findOneAndUpdate with upsert — avoids pre-save hook conflicts
 async function syncFileCommands(commandsArray) {
   await connect();
   const now = new Date();
   for (const cmd of commandsArray) {
     const nameLower = cmd.name.toLowerCase();
-    const existing = await Command.findOne({ name: nameLower }).lean();
+    const existing  = await Command.findOne({ name: nameLower }).lean();
 
     if (!existing) {
       await Command.findOneAndUpdate(
