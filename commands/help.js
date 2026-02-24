@@ -1,0 +1,52 @@
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('Show all available commands and their descriptions'),
+  cooldown: 5,
+  async execute(interaction) {
+    const commands = interaction.client.commands;
+    
+    const categories = {
+      '📊 Utility': ['ping', 'help', 'serverinfo', 'userinfo', 'status'],
+      '📤 Export': ['export', 'exportmessages', 'exportinvites', 'fetchreactions'],
+      '⚙️ Moderation': ['cleanup', 'repost', 'rolemanage'],
+      '🔍 Search': ['findids', 'listusers'],
+      '🎮 Gaming': ['schedule', 'generate']
+    };
+
+    const embed = new EmbedBuilder()
+      .setTitle('📚 Bot Commands')
+      .setColor(0x5865F2)
+      .setDescription('Here are all available commands:')
+      .setTimestamp()
+      .setFooter({ text: `Total: ${commands.size} commands` });
+
+    for (const [category, cmdNames] of Object.entries(categories)) {
+      const categoryCommands = cmdNames
+        .map(name => {
+          const cmd = commands.get(name);
+          if (!cmd) return null;
+          return `\`/${name}\` - ${cmd.data.description}`;
+        })
+        .filter(Boolean);
+
+      if (categoryCommands.length > 0) {
+        embed.addFields({
+          name: category,
+          value: categoryCommands.join('\n'),
+          inline: false
+        });
+      }
+    }
+
+    embed.addFields({
+      name: '💡 Tips',
+      value: '• Most commands have additional options - explore them!\n• Use `/status` to see bot statistics\n• Exports are sent to your DMs when possible',
+      inline: false
+    });
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+};
