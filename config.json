@@ -1,4 +1,7 @@
 {
-  "allowedGuilds": [],
-  "commandRoleId": ""
+  "allowedGuilds": [
+    "410479299347480576",
+    "1180796521847988354"
+  ],
+  "commandRoleId": "790571331962798129"
 }

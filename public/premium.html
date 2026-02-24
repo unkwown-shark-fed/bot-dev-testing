@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── RESET & TOKENS ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg0:   #08090e;
+  --bg1:   #0e0f18;
+  --bg2:   #141521;
+  --bg3:   #1c1e2e;
+  --bg4:   #232538;
+  --line:  #252736;
+  --line2: #303350;
+  --acc:   #6c63ff;
+  --acc2:  #9d97ff;
+  --acc3:  #4940d4;
+  --grn:   #2dd4a0;
+  --red:   #f06080;
+  --yel:   #f0c060;
+  --blu:   #5ba4f5;
+  --pnk:   #e879a0;
+  --t1:    #ddddf5;
+  --t2:    #8888aa;
+  --t3:    #50506a;
+  --trig:  #6c63ff;
+  --cond:  #f0a030;
+  --act:   #2dd4a0;
+  --f:     'Outfit', sans-serif;
+  --m:     'IBM Plex Mono', monospace;
+  --r:     10px;
+  --r2:    14px;
+}
+html { font-size: 14px; scroll-behavior: smooth; }
+body { font-family: var(--f); background: var(--bg0); color: var(--t1); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+button { font-family: var(--f); cursor: pointer; border: none; outline: none; }
+input, select, textarea { font-family: var(--m); outline: none; }
+input[type=color] { cursor: pointer; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 3px; }
+
+/* ── LOGIN ──────────────────────────────────────────────────────────────── */
+#ls {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse 70% 60% at 25% 35%, #1a1040 0%, var(--bg0) 65%);
+}
+.lcard {
+  width: 360px; padding: 44px 40px; background: var(--bg1);
+  border: 1px solid var(--line2); border-radius: 20px;
+  box-shadow: 0 0 60px rgba(108,99,255,.12), 0 24px 48px rgba(0,0,0,.4);
+}
+.lcard h1 { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+.lcard h1 em { font-style: normal; color: var(--acc2); }
+.lcard p  { color: var(--t2); font-size: 13px; margin-bottom: 32px; }
+.lf-label { display: block; font-size: 11px; font-weight: 600; color: var(--t2); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 7px; }
+.lf-input {
+  width: 100%; padding: 11px 14px; background: var(--bg3); border: 1px solid var(--line);
+  border-radius: var(--r); color: var(--t1); font-size: 13px; transition: border-color .2s;
+}
+.lf-input:focus { border-color: var(--acc); }
+.lerr { color: var(--red); font-size: 12px; margin-top: 8px; min-height: 18px; }
+.lbtn {
+  width: 100%; margin-top: 22px; padding: 13px; background: var(--acc);
+  border-radius: var(--r); color: #fff; font-size: 15px; font-weight: 700;
+  transition: background .2s, transform .15s;
+}
+.lbtn:hover { background: var(--acc2); transform: translateY(-1px); }
+
+/* ── APP ────────────────────────────────────────────────────────────────── */
+#app { display: none; flex-direction: column; min-height: 100vh; }
+#app.on { display: flex; }
+
+/* Top bar */
+.tbar {
+  height: 52px; background: var(--bg1); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 20px; gap: 10px; position: sticky; top: 0; z-index: 200;
+  flex-shrink: 0;
+}
+.tbar-logo { font-size: 16px; font-weight: 800; color: var(--acc2); margin-right: 6px; letter-spacing: -.3px; }
+.tbar-tabs { display: flex; gap: 3px; flex: 1; }
+.ttab {
+  padding: 5px 14px; background: none; border: 1px solid transparent; border-radius: 8px;
+  color: var(--t2); font-size: 13px; font-weight: 600; transition: all .15s;
+}
+.ttab:hover { color: var(--t1); background: var(--bg3); }
+.ttab.on { background: var(--bg3); border-color: var(--line2); color: var(--acc2); }
+.tbar-status { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--t2); font-weight: 600; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.sdot.on { background: var(--grn); box-shadow: 0 0 8px rgba(45,212,160,.5); }
+.tbtn {
+  padding: 5px 13px; background: var(--bg3); border: 1px solid var(--line2);
+  border-radius: 8px; color: var(--t2); font-size: 12px; font-weight: 600; transition: all .15s;
+}
+.tbtn:hover { color: var(--t1); }
+
+/* Pages */
+.pg { display: none; flex: 1; overflow: hidden; }
+.pg.on { display: flex; }
+.pg-scroll { flex: 1; overflow-y: auto; padding: 28px 32px; }
+
+/* ── BUILDER PAGE ───────────────────────────────────────────────────────── */
+#pg-builder { flex-direction: row; }
+
+/* Left config panel */
+.cpanel {
+  width: 360px; min-width: 300px; background: var(--bg1); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+}
+.csec { padding: 18px 16px; border-bottom: 1px solid var(--line); }
+.csec:last-child { border-bottom: none; }
+.csec-hd {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--t3); margin-bottom: 14px; display: flex; align-items: center; gap: 6px;
+}
+.csec-hd::before { content: ''; width: 3px; height: 11px; background: var(--acc); border-radius: 2px; flex-shrink: 0; }
+.csec-hd.trig::before { background: var(--trig); }
+.csec-hd.cond::before { background: var(--cond); }
+.csec-hd.act::before  { background: var(--act); }
+.csec-hd .badge {
+  margin-left: auto; font-size: 9px; font-weight: 600; padding: 2px 7px;
+  background: var(--bg4); border-radius: 20px; color: var(--t3); letter-spacing: 0;
+}
+
+/* Fields */
+.frow { margin-bottom: 12px; }
+.frow:last-child { margin-bottom: 0; }
+.flabel { font-size: 11px; font-weight: 600; color: var(--t2); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.flabel .fsub { color: var(--t3); font-weight: 400; font-size: 10px; }
+.finput, .fsel, .ftextarea {
+  width: 100%; padding: 8px 11px; background: var(--bg3); border: 1px solid var(--line);
+  border-radius: 8px; color: var(--t1); font-size: 12px; transition: border-color .2s;
+}
+.finput:focus, .fsel:focus, .ftextarea:focus { border-color: var(--acc); background: var(--bg4); }
+.fsel { cursor: pointer; -webkit-appearance: none; }
+.ftextarea { resize: vertical; min-height: 68px; line-height: 1.55; font-size: 11.5px; }
+.crow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.crow label { font-size: 12px; color: var(--t2); cursor: pointer; }
+.crow input[type=checkbox] { accent-color: var(--acc); width: 13px; height: 13px; cursor: pointer; }
+.color-pair { display: flex; gap: 8px; }
+.color-pair .finput { flex: 1; }
+.cprev { width: 38px; height: 34px; border-radius: 8px; border: 1px solid var(--line); flex-shrink: 0; }
+
+/* Mini cards for conditions / actions / options / buttons */
+.mcard { background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.mcard-trig { border-left: 3px solid var(--trig); }
+.mcard-cond { border-left: 3px solid var(--cond); }
+.mcard-act  { border-left: 3px solid var(--act); }
+.mcard-opt  { border-left: 3px solid var(--blu); }
+.mcard-btn  { border-left: 3px solid var(--pnk); }
+.mcard-hd   { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.mcard-hd .mtitle { font-size: 10px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: .05em; }
+.xbtn { background: none; border: none; color: var(--t3); font-size: 18px; line-height: 1; padding: 0 2px; transition: color .15s; }
+.xbtn:hover { color: var(--red); }
+
+/* Small buttons */
+.sbtn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 11px;
+  background: var(--bg4); border: 1px solid var(--line2); border-radius: 7px;
+  color: var(--t2); font-size: 11px; font-weight: 600; transition: all .15s;
+}
+.sbtn:hover { color: var(--t1); border-color: var(--acc); }
+.sbtn.pri { background: rgba(108,99,255,.15); border-color: rgba(108,99,255,.4); color: var(--acc2); }
+.sbtn.pri:hover { background: rgba(108,99,255,.25); }
+.sbtn.dng { color: var(--red); border-color: rgba(240,96,128,.3); }
+
+/* Action type selector row */
+.add-row { display: flex; gap: 8px; }
+.add-row .fsel { flex: 1; }
+
+/* ── CANVAS (middle) ────────────────────────────────────────────────────── */
+.canvas-wrap {
+  flex: 1; display: flex; flex-direction: column; background: var(--bg0); overflow: hidden;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.canvas-bar {
+  display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+  background: var(--bg1); border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.canvas-bar h3 { font-size: 12px; font-weight: 700; flex: 1; color: var(--t2); }
+.canvas-scroll { flex: 1; overflow-y: auto; padding: 28px 20px; display: flex; flex-direction: column; align-items: center; }
+.c-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--t3); gap: 10px; text-align: center; }
+.c-empty .emi { font-size: 44px; opacity: .25; }
+.c-empty p { font-size: 13px; }
+
+/* Flow nodes */
+.fnode {
+  width: 310px; border-radius: 12px; border: 1px solid var(--line2); background: var(--bg2);
+  overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.3); animation: nIn .25s ease;
+}
+@keyframes nIn { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+.fnode-hd { padding: 11px 14px; display: flex; align-items: center; gap: 9px; }
+.fnode-hd .ni { font-size: 17px; }
+.fnode-hd .nname { font-size: 13px; font-weight: 700; flex: 1; }
+.fnode-hd .ntype { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; }
+.fnode-body { padding: 12px 14px; }
+.nfield { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; gap: 8px; }
+.nfield:last-child { margin-bottom: 0; }
+.nfk { color: var(--t3); font-size: 11px; white-space: nowrap; }
+.nfv { color: var(--t1); font-family: var(--m); font-size: 11px; text-align: right; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fn-trig .fnode-hd { background: linear-gradient(120deg, #3b3490, #6c63ff); }
+.fn-cond .fnode-hd { background: linear-gradient(120deg, #7a4a00, #f0a030); }
+.fn-act  .fnode-hd { background: linear-gradient(120deg, #0b4a32, #2dd4a0); color: #000; }
+.fn-act  .fnode-hd .ntype { opacity: .45; }
+.farrow { width: 2px; height: 36px; background: linear-gradient(to bottom, var(--line2), var(--line)); margin: 0 auto; position: relative; flex-shrink: 0; }
+.farrow::after { content: '▾'; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); color: var(--line2); font-size: 11px; }
+
+/* ── CODE PANEL (right) ─────────────────────────────────────────────────── */
+.cpanel-right {
+  width: 400px; min-width: 280px; background: var(--bg1); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.cpr-hd {
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.cpr-hd h4 { font-size: 12px; font-weight: 700; color: var(--t2); }
+.code-ta {
+  flex: 1; width: 100%; background: var(--bg0); border: none; resize: none;
+  color: var(--t2); font-family: var(--m); font-size: 11px; line-height: 1.65;
+  padding: 16px; white-space: pre; overflow: auto;
+}
+.deploy-bar { padding: 14px 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.dname-row { display: flex; gap: 8px; }
+.dname-row .finput { flex: 1; }
+.dres {
+  display: none; padding: 9px 12px; border-radius: 8px; font-family: var(--m); font-size: 11px;
+  line-height: 1.5; max-height: 110px; overflow-y: auto;
+}
+.dres.ok  { display: block; background: rgba(45,212,160,.08); border-left: 3px solid var(--grn); color: var(--grn); }
+.dres.err { display: block; background: rgba(240,96,128,.08); border-left: 3px solid var(--red); color: var(--red); }
+.dbtn {
+  width: 100%; padding: 12px; background: var(--acc); border-radius: 10px; color: #fff;
+  font-size: 14px; font-weight: 700; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.dbtn:hover:not(:disabled) { background: var(--acc2); transform: translateY(-1px); }
+.dbtn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.spin { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: sp .6s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* ── COMMANDS PAGE ──────────────────────────────────────────────────────── */
+.pg-title { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+.pg-sub   { color: var(--t2); font-size: 13px; margin-bottom: 24px; }
+.cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.cmd-card {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+  transition: border-color .2s, transform .15s;
+}
+.cmd-card:hover { border-color: var(--line2); transform: translateY(-1px); }
+.cmd-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; color: var(--acc2); font-family: var(--m); }
+.cmd-desc { font-size: 12px; color: var(--t2); margin-bottom: 10px; min-height: 30px; line-height: 1.5; }
+.cmd-meta { font-size: 10px; color: var(--t3); font-family: var(--m); margin-bottom: 12px; }
+.cmd-acts { display: flex; gap: 8px; }
+.badge-db   { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; background: rgba(108,99,255,.2); color: var(--acc2); font-family: var(--m); }
+.badge-file { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; background: rgba(91,164,245,.15); color: var(--blu); font-family: var(--m); }
+.badge-ok   { font-size: 10px; padding: 2px 7px; border-radius: 20px; background: rgba(45,212,160,.15); color: var(--grn); font-family: var(--m); }
+.badge-warn { font-size: 10px; padding: 2px 7px; border-radius: 20px; background: rgba(240,192,96,.15); color: var(--yel); font-family: var(--m); }
+.lib-toolbar { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.lib-toolbar h2 { font-size: 15px; font-weight: 700; flex: 1; }
+.lib-info { font-size: 12px; color: var(--t2); }
+
+/* ── CONTROL PAGE ───────────────────────────────────────────────────────── */
+.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.stat-box { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.stat-val { font-size: 26px; font-weight: 800; margin-bottom: 3px; font-family: var(--m); }
+.stat-key { font-size: 12px; color: var(--t2); }
+.ctrl-card { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 22px; max-width: 460px; margin-bottom: 16px; }
+.ctrl-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+.ctrl-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.cbtn {
+  padding: 11px 22px; border-radius: 9px; font-size: 13px; font-weight: 700;
+  border: 1px solid; transition: all .2s;
+}
+.cbtn.start  { background: rgba(45,212,160,.1);  border-color: rgba(45,212,160,.3);  color: var(--grn); }
+.cbtn.stop   { background: rgba(240,96,128,.1);  border-color: rgba(240,96,128,.3);  color: var(--red); }
+.cbtn.restart{ background: rgba(240,192,96,.1);  border-color: rgba(240,192,96,.3);  color: var(--yel); }
+.cbtn:hover:not(:disabled) { filter: brightness(1.2); transform: translateY(-1px); }
+.cbtn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+/* ── LOGS PAGE ──────────────────────────────────────────────────────────── */
+.logbox {
+  flex: 1; background: var(--bg0); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 16px; font-family: var(--m); font-size: 11.5px; line-height: 1.7;
+  overflow-y: auto; max-height: calc(100vh - 200px);
+}
+.log-i { color: var(--grn); }
+.log-e { color: var(--red); }
+
+/* ── TOAST ──────────────────────────────────────────────────────────────── */
+#toasts { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast {
+  padding: 11px 16px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  animation: tIn .3s ease; max-width: 300px; pointer-events: auto;
+}
+.toast.ok  { background: rgba(45,212,160,.12); border: 1px solid rgba(45,212,160,.35); color: var(--grn); }
+.toast.err { background: rgba(240,96,128,.12); border: 1px solid rgba(240,96,128,.35); color: var(--red); }
+.toast.inf { background: rgba(108,99,255,.12); border: 1px solid rgba(108,99,255,.35); color: var(--acc2); }
+@keyframes tIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ──────────────────────────────────────────────────────────────── -->
+<div id="ls">
+  <div class="lcard">
+    <h1>Bot <em>Studio</em></h1>
+    <p>Visual command builder · discord-utility-bot v2.0</p>
+    <label class="lf-label" for="lpw">Dashboard Password</label>
+    <input class="lf-input" type="password" id="lpw" placeholder="Enter password" autocomplete="current-password">
+    <div class="lerr" id="lerr"></div>
+    <button class="lbtn" onclick="login()">Enter Studio →</button>
+  </div>
+</div>
+
+<!-- ── APP ────────────────────────────────────────────────────────────────── -->
+<div id="app">
+  <!-- Top bar -->
+  <header class="tbar">
+    <span class="tbar-logo">⚡ Studio</span>
+    <nav class="tbar-tabs">
+      <button class="ttab on"  onclick="nav('builder',this)">🔨 Builder</button>
+      <button class="ttab"     onclick="nav('library',this)">🗄 Library</button>
+      <button class="ttab"     onclick="nav('commands',this)">📦 Commands</button>
+      <button class="ttab"     onclick="nav('control',this)">🎮 Control</button>
+      <button class="ttab"     onclick="nav('logs',this)">📝 Logs</button>
+    </nav>
+    <div class="tbar-status">
+      <div class="sdot" id="sdot"></div>
+      <span id="stxt">Offline</span>
+    </div>
+    <button class="tbtn" onclick="logout()">Logout</button>
+  </header>
+
+  <!-- ── BUILDER ─────────────────────────────────────────────────────────── -->
+  <div class="pg on" id="pg-builder">
+
+    <!-- Left: config panel -->
+    <div class="cpanel">
+
+      <!-- Command meta -->
+      <div class="csec">
+        <div class="csec-hd">Command</div>
+        <div class="frow">
+          <div class="flabel">Name <span class="fsub">lowercase · no spaces</span></div>
+          <input class="finput" id="cn" placeholder="my-command" oninput="sanitizeCmdName(this); preview()">
+          <div id="cn-hint" style="font-size:10px;margin-top:4px;font-family:var(--m);min-height:14px;color:var(--g);"></div>
+        </div>
+        <div class="frow">
+          <div class="flabel">Description</div>
+          <input class="finput" id="cd" placeholder="What does this command do?" oninput="preview()">
+        </div>
+      </div>
+
+      <!-- ① Trigger -->
+      <div class="csec">
+        <div class="csec-hd trig">① Trigger</div>
+
+        <div class="frow">
+          <div class="flabel">Type</div>
+          <select class="fsel" id="ttype" onchange="onTrig()">
+            <option value="slash">⚡ Slash Command</option>
+            <option value="button">🔘 Button Click</option>
+            <option value="keyword">💬 Message Keyword</option>
+          </select>
+        </div>
+
+        <!-- Slash -->
+        <div id="t-slash">
+          <div class="frow">
+            <div class="flabel">Cooldown <span class="fsub">seconds — read by index.js</span></div>
+            <input class="finput" type="number" id="t-cd" value="3" min="0" oninput="preview()">
+          </div>
+          <div class="flabel" style="margin-bottom:8px;">Command Options <span class="fsub">/ parameters</span></div>
+          <div id="opts-list"></div>
+          <button class="sbtn" onclick="addOpt()">＋ Add Option</button>
+        </div>
+
+        <!-- Button -->
+        <div id="t-button" style="display:none">
+          <div class="frow">
+            <div class="flabel">Prompt message</div>
+            <input class="finput" id="t-prompt" placeholder="Choose an option:" oninput="preview()">
+          </div>
+          <div class="frow">
+            <div class="flabel">Collector timeout <span class="fsub">seconds</span></div>
+            <input class="finput" type="number" id="t-timeout" value="60" oninput="preview()">
+          </div>
+          <div class="flabel" style="margin-bottom:8px;">Buttons</div>
+          <div id="btns-list"></div>
+          <button class="sbtn" onclick="addBtn()">＋ Add Button</button>
+        </div>
+
+        <!-- Keyword -->
+        <div id="t-keyword" style="display:none">
+          <div class="frow">
+            <div class="flabel">Keywords <span class="fsub">comma separated</span></div>
+            <input class="finput" id="t-kw" placeholder="hello, hi, hey" oninput="preview()">
+          </div>
+          <div class="frow">
+            <div class="flabel">Match type</div>
+            <select class="fsel" id="t-mt" onchange="preview()">
+              <option value="includes">Contains keyword</option>
+              <option value="exact">Exact match</option>
+              <option value="startsWith">Starts with keyword</option>
+            </select>
+          </div>
+          <div class="frow">
+            <div class="flabel">Restrict to channel <span class="fsub">name or ID · optional</span></div>
+            <input class="finput" id="t-ch" placeholder="general" oninput="preview()">
+          </div>
+          <label class="crow">
+            <input type="checkbox" id="t-ib" checked onchange="preview()">
+            <label>Ignore bot messages</label>
+          </label>
+        </div>
+      </div>
+
+      <!-- ② Conditions -->
+      <div class="csec">
+        <div class="csec-hd cond">② Conditions <span class="badge">optional</span></div>
+        <div id="cond-list"></div>
+        <div class="add-row">
+          <select class="fsel" id="nc-type">
+            <option value="has_role">User has role</option>
+            <option value="missing_role">User missing role</option>
+            <option value="in_channel">Must be in channel</option>
+            <option value="is_admin">User is Administrator</option>
+          </select>
+          <button class="sbtn pri" onclick="addCond()">＋ Add</button>
+        </div>
+      </div>
+
+      <!-- ③ Actions -->
+      <div class="csec">
+        <div class="csec-hd act">③ Actions</div>
+        <div id="act-list"></div>
+        <div class="add-row">
+          <select class="fsel" id="na-type">
+            <option value="reply_text">💬 Reply — Text</option>
+            <option value="reply_embed">🎨 Reply — Embed</option>
+            <option value="followup_text">➕ Follow-up — Text</option>
+            <option value="followup_embed">➕ Follow-up — Embed</option>
+            <option value="send_to_channel">📤 Send to Channel — Text</option>
+            <option value="send_embed_to_channel">📤 Send to Channel — Embed</option>
+          </select>
+          <button class="sbtn pri" onclick="addAct()">＋ Add</button>
+        </div>
+      </div>
+
+    </div><!-- /cpanel -->
+
+    <!-- Middle: canvas -->
+    <div class="canvas-wrap">
+      <div class="canvas-bar">
+        <h3>Flow Preview</h3>
+        <button class="sbtn" onclick="genCode()">⚡ Generate Code</button>
+      </div>
+      <div class="canvas-scroll" id="canvas">
+        <div class="c-empty" id="c-empty">
+          <div class="emi">🔨</div>
+          <p>Configure your command on the left<br>and the flow will appear here</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: code panel -->
+    <div class="cpanel-right">
+      <div class="cpr-hd">
+        <h4>Generated Code</h4>
+        <button class="sbtn" onclick="copyCode()">📋 Copy</button>
+      </div>
+      <textarea class="code-ta" id="code-out" readonly
+        placeholder="// Code appears here after you click ⚡ Generate Code&#10;// Then hit 🚀 Save &amp; Deploy to push it to Discord"></textarea>
+      <div class="deploy-bar">
+        <div class="dname-row">
+          <input class="finput" id="dname" placeholder="command-name">
+          <button class="sbtn pri" onclick="genCode()">Preview</button>
+        </div>
+        <div class="dres" id="dres"></div>
+        <button class="dbtn" id="dbtn" onclick="deploy()">🚀 Save &amp; Deploy to Discord</button>
+      </div>
+    </div>
+
+  </div><!-- /pg-builder -->
+
+  <!-- ── LIBRARY (DB) ──────────────────────────────────────────────────────── -->
+  <div class="pg" id="pg-library">
+    <div class="lib-toolbar">
+      <h2>🗄 Command Library</h2>
+      <span class="lib-info" id="sc-db">Loading…</span>
+      <button class="sbtn" id="sync-btn" onclick="syncToDB()">🔄 Sync Files → DB</button>
+    </div>
+    <div class="pg-scroll" style="padding-top:0">
+      <p class="pg-sub" style="padding:10px 20px 0">All commands stored in MongoDB. <strong>Sync Files → DB</strong> imports your existing /commands folder. <strong>Edit</strong> reloads dashboard-built commands into the visual builder.</p>
+      <div class="cmd-grid" id="lib-grid"><p style="color:var(--t2);padding:20px">Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- ── COMMANDS (legacy file view) ────────────────────────────────────────── -->
+  <div class="pg" id="pg-commands">
+    <div class="pg-scroll">
+      <h1 class="pg-title">Commands</h1>
+      <p class="pg-sub">All .js files currently in your /commands directory</p>
+      <div class="cmd-grid" id="cmd-grid"><p style="color:var(--t2)">Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- ── CONTROL ───────────────────────────────────────────────────────────── -->
+  <div class="pg" id="pg-control">
+    <div class="pg-scroll">
+      <h1 class="pg-title">Bot Control</h1>
+      <p class="pg-sub">Manage the bot process — mirrors index.js lifecycle</p>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-val" id="sc">—</div><div class="stat-key">Commands</div></div>
+        <div class="stat-box"><div class="stat-val" id="sg">—</div><div class="stat-key">Guilds (config.json)</div></div>
+        <div class="stat-box"><div class="stat-val" id="su">—</div><div class="stat-key">Uptime</div></div>
+        <div class="stat-box"><div class="stat-val" id="sv">—</div><div class="stat-key">Version</div></div>
+      </div>
+      <div class="ctrl-card">
+        <h3>Process Control</h3>
+        <div class="ctrl-btns">
+          <button class="cbtn start"   id="bs" onclick="botStart()">▶ Start</button>
+          <button class="cbtn stop"    id="bx" onclick="botStop()" disabled>⏹ Stop</button>
+          <button class="cbtn restart" id="br" onclick="botRestart()" disabled>🔄 Restart</button>
+        </div>
+      </div>
+      <div class="ctrl-card" style="max-width:460px">
+        <h3>Log Files</h3>
+        <div id="log-files" style="color:var(--t2);font-size:13px">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LOGS ─────────────────────────────────────────────────────────────── -->
+  <div class="pg" id="pg-logs" style="flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:20px 24px 12px;">
+      <div><h1 class="pg-title">Live Logs</h1><p class="pg-sub" style="margin:0">Real-time bot stdout / stderr</p></div>
+      <button class="sbtn" onclick="clearLogs()">Clear</button>
+    </div>
+    <div style="padding:0 24px 20px;flex:1;display:flex;flex-direction:column;">
+      <div class="logbox" id="logbox"><span class="log-i">Waiting for bot output…</span></div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+// ── STATE ───────────────────────────────────────────────────────────────────
+let TOK   = localStorage.getItem('bst');
+let opts  = [];   // slash options
+let btns  = [];   // buttons (button trigger)
+let conds = [];   // conditions
+let acts  = [];   // actions
+let pTimer = null;
+
+// ── NAME SANITIZER ───────────────────────────────────────────────────────────
+function sanitizeCmdName(input) {
+  const raw      = input.value;
+  const safe     = raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+  const hint     = document.getElementById('cn-hint');
+  if (!raw) { hint.textContent = ''; return; }
+  if (safe !== raw) {
+    hint.style.color = 'var(--yel)';
+    hint.textContent = `→ will be saved as: "${safe}"`;
+  } else if (!safe) {
+    hint.style.color = 'var(--red)';
+    hint.textContent = '✗ Invalid name';
+  } else {
+    hint.style.color = 'var(--grn)';
+    hint.textContent = `✓ Valid: "/${safe}"`;
+  }
+}
+
+// ── AUTH ────────────────────────────────────────────────────────────────────
+function login() {
+  const pw = document.getElementById('lpw').value;
+  api('/api/login', { method:'POST', body: JSON.stringify({ password: pw }) })
+    .then(r => r.json()).then(d => {
+      if (d.success) { TOK = d.token; localStorage.setItem('bst', TOK); showApp(); }
+      else document.getElementById('lerr').textContent = 'Incorrect password';
+    }).catch(() => { document.getElementById('lerr').textContent = 'Connection failed'; });
+}
+document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+function logout() { localStorage.removeItem('bst'); location.reload(); }
+
+function api(url, o = {}) {
+  return fetch(url, { ...o, headers: { 'Authorization': `Bearer ${TOK}`, 'Content-Type': 'application/json', ...(o.headers||{}) } });
+}
+
+// ── APP INIT ─────────────────────────────────────────────────────────────────
+function showApp() {
+  document.getElementById('ls').style.display = 'none';
+  document.getElementById('app').classList.add('on');
+  wsConnect();
+  tick();
+  setInterval(tick, 6000);
+  loadCmds();
+  loadStats();
+  loadLogFiles();
+}
+
+if (TOK) {
+  api('/api/status').then(r => { if (r.ok) showApp(); else { TOK = null; localStorage.removeItem('bst'); } });
+}
+
+// ── NAV ─────────────────────────────────────────────────────────────────────
+function nav(id, btn) {
+  document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.ttab').forEach(b => b.classList.remove('on'));
+  document.getElementById('pg-' + id).classList.add('on');
+  btn.classList.add('on');
+  if (id === 'commands') loadCmds();
+  if (id === 'control')  { loadStats(); loadLogFiles(); }
+  if (id === 'library')  loadLibrary();
+}
+
+// ── WS ──────────────────────────────────────────────────────────────────────
+function wsConnect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws    = new WebSocket(`${proto}//${location.host}`);
+  ws.onmessage = e => {
+    const { type, data } = JSON.parse(e.data);
+    if (type === 'log')    appendLog(data);
+    if (type === 'status') setStatus(data.status);
+  };
+  ws.onclose = () => setTimeout(wsConnect, 3000);
+}
+
+// ── STATUS ──────────────────────────────────────────────────────────────────
+async function tick() {
+  try {
+    const d = await api('/api/status').then(r => r.json());
+    setStatus(d.status);
+    document.getElementById('su').textContent = fmtUp(d.uptime);
+  } catch (_) {}
+}
+
+function setStatus(s) {
+  const on = s === 'running';
+  document.getElementById('sdot').className = 'sdot' + (on ? ' on' : '');
+  document.getElementById('stxt').textContent = on ? 'Online' : (s === 'stopping' ? 'Stopping…' : 'Offline');
+  document.getElementById('bs').disabled = on;
+  document.getElementById('bx').disabled = !on;
+  document.getElementById('br').disabled = !on;
+}
+
+async function loadStats() {
+  try {
+    const d = await api('/api/stats').then(r => r.json());
+    document.getElementById('sc').textContent = d.totalCommands ?? d.commands ?? '—';
+    document.getElementById('sg').textContent = d.guilds;
+    document.getElementById('sv').textContent = d.version;
+    document.getElementById('su').textContent = fmtUp(d.uptime);
+    if (document.getElementById('sc-db'))
+      document.getElementById('sc-db').textContent = `${d.fileCommands ?? 0} file · ${d.dbCommands ?? 0} dashboard`;
+  } catch (_) {}
+}
+
+async function loadLogFiles() {
+  try {
+    const { files } = await api('/api/log-files').then(r => r.json());
+    const el = document.getElementById('log-files');
+    if (!files.length) { el.textContent = 'No log files found.'; return; }
+    el.innerHTML = files.map(f =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">
+        <span style="font-family:var(--m);font-size:12px;color:var(--t1)">${f.name}</span>
+        <span style="font-size:11px;color:var(--t3)">${(f.size/1024).toFixed(1)} KB</span>
+       </div>`).join('');
+  } catch (_) {}
+}
+
+// ── BOT CONTROL ─────────────────────────────────────────────────────────────
+async function botStart() {
+  const d = await api('/api/start', { method:'POST' }).then(r => r.json());
+  toast(d.message || d.error, d.success ? 'ok' : 'err');
+  tick();
+}
+async function botStop() {
+  const d = await api('/api/stop', { method:'POST' }).then(r => r.json());
+  toast(d.message || d.error, d.success ? 'inf' : 'err');
+  tick();
+}
+async function botRestart() {
+  await botStop();
+  setTimeout(botStart, 2200);
+}
+
+// ── COMMANDS LIBRARY ─────────────────────────────────────────────────────────
+async function loadLibrary() {
+  const g = document.getElementById('lib-grid');
+  if (!g) return;
+  g.innerHTML = '<p style="color:var(--t2);padding:20px">Loading…</p>';
+  try {
+    const { commands } = await api('/api/commands').then(r => r.json());
+    if (!commands.length) { g.innerHTML = '<p style="color:var(--t2);padding:20px">No commands in database yet. Click <strong>Sync Files → DB</strong> to import your existing commands.</p>'; return; }
+    g.innerHTML = commands.map(c => {
+      const srcBadge = c.source === 'dashboard'
+        ? `<span class="badge-db">dashboard</span>`
+        : `<span class="badge-file">file</span>`;
+      const regBadge = c.registered
+        ? `<span class="badge-ok">✓ registered</span>`
+        : `<span class="badge-warn">unregistered</span>`;
+      const usage = c.usageCount ? `${c.usageCount} uses` : 'never used';
+      const editBtn = c.source === 'dashboard' && c.flow
+        ? `<button class="sbtn" onclick="loadFlowFromDB('${c.name}')">✏️ Edit</button>`
+        : `<button class="sbtn" style="opacity:.4;cursor:not-allowed" title="File commands edited in code">✏️ Edit</button>`;
+      return `
+    <div class="cmd-card">
+      <div class="cmd-name" style="display:flex;align-items:center;gap:8px">/${esc(c.name)} ${srcBadge} ${regBadge}</div>
+      <div class="cmd-desc">${esc(c.description || 'No description')}</div>
+      <div class="cmd-meta" style="display:flex;gap:12px;flex-wrap:wrap">
+        <span>📊 ${usage}</span>
+        ${c.lastUsedAt ? `<span>⏱ Last: ${new Date(c.lastUsedAt).toLocaleDateString()}</span>` : ''}
+        ${c.registeredAt ? `<span>🚀 Deployed: ${new Date(c.registeredAt).toLocaleDateString()}</span>` : ''}
+      </div>
+      <div class="cmd-acts">
+        ${editBtn}
+        <button class="sbtn dng" onclick="delCmd('${c.name}')">🗑 Delete</button>
+      </div>
+    </div>`;
+    }).join('');
+  } catch(e) { g.innerHTML = `<p style="color:var(--red)">Error: ${esc(e.message)}</p>`; }
+}
+
+// load old file-based grid too (kept for compatibility)
+async function loadCmds() { loadLibrary(); }
+
+async function loadCmdCode(name) {
+  const { command } = await api(`/api/commands/${name}`).then(r => r.json());
+  if (command?.code) {
+    document.getElementById('code-out').value = command.code;
+    document.getElementById('dname').value = name;
+  }
+  nav('builder', document.querySelector('.ttab'));
+  toast(`/${name} loaded into code panel`, 'inf');
+}
+
+async function loadFlowFromDB(name) {
+  try {
+    const { command } = await api(`/api/commands/${name}`).then(r => r.json());
+    if (!command?.flow) { toast('No flow data for this command', 'err'); return; }
+    // Switch to builder tab
+    const builderTab = document.querySelector('[onclick*="builder"]');
+    if (builderTab) nav('builder', builderTab);
+    toast(`Loading /${name} into builder…`, 'inf');
+    // Populate form from flow
+    const f = command.flow;
+    document.getElementById('cn').value = f.commandName || name;
+    document.getElementById('cd').value = f.commandDesc || '';
+    document.getElementById('ttype').value = f.trigger?.type || 'slash';
+    onTrig();
+    // restore options/buttons/conditions/actions
+    opts  = f.trigger?.options  || [];
+    btns  = f.trigger?.buttons  || [];
+    conds = f.conditions || [];
+    acts  = f.actions    || [];
+    renderOpts(); renderBtns(); renderConds(); renderActs();
+    if (f.trigger?.type === 'slash')   { if(document.getElementById('t-cd')) document.getElementById('t-cd').value = f.trigger.cooldown || 3; }
+    if (f.trigger?.type === 'button')  { if(document.getElementById('t-prompt')) document.getElementById('t-prompt').value = f.trigger.promptMessage||''; }
+    if (f.trigger?.type === 'keyword') {
+      if(document.getElementById('t-kw')) document.getElementById('t-kw').value = (f.trigger.keywords||[]).join(', ');
+      if(document.getElementById('t-mt')) document.getElementById('t-mt').value = f.trigger.matchType||'includes';
+      if(document.getElementById('t-ch')) document.getElementById('t-ch').value = f.trigger.channel||'';
+    }
+    preview(); genCode();
+    toast(`/${name} loaded into builder`, 'ok');
+  } catch(e) { toast('Failed to load: ' + e.message, 'err'); }
+}
+
+async function delCmd(name) {
+  if (!confirm(`Delete /${name} from DB and Discord?\n\nThis cannot be undone.`)) return;
+  const d = await api(`/api/commands/${name}`, { method:'DELETE' }).then(r => r.json());
+  toast(d.success ? `/${name} deleted` : (d.error || 'Failed'), d.success ? 'inf' : 'err');
+  loadLibrary(); loadStats();
+}
+
+async function syncToDB() {
+  const btn = document.getElementById('sync-btn');
+  btn.disabled = true; btn.textContent = 'Syncing…';
+  try {
+    const d = await api('/api/sync', { method:'POST' }).then(r => r.json());
+    toast(d.message || `Synced ${d.synced} commands`, 'ok');
+    if (d.failed?.length) toast(`${d.failed.length} files failed — check logs`, 'err');
+    loadLibrary(); loadStats();
+  } catch(e) { toast('Sync error: ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = '🔄 Sync Files → DB';
+}
+
+// ── LOGS ─────────────────────────────────────────────────────────────────────
+function appendLog({ type, message, timestamp }) {
+  const box = document.getElementById('logbox');
+  const el  = document.createElement('div');
+  el.className = type === 'error' ? 'log-e' : 'log-i';
+  el.textContent = `[${new Date(timestamp).toLocaleTimeString()}] ${message.trim()}`;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  if (box.children.length > 500) box.removeChild(box.firstChild);
+}
+function clearLogs() { document.getElementById('logbox').innerHTML = '<span class="log-i">Logs cleared.</span>'; }
+
+// ── TRIGGER SWITCH ────────────────────────────────────────────────────────────
+function onTrig() {
+  const t = document.getElementById('ttype').value;
+  document.getElementById('t-slash').style.display   = t === 'slash'   ? '' : 'none';
+  document.getElementById('t-button').style.display  = t === 'button'  ? '' : 'none';
+  document.getElementById('t-keyword').style.display = t === 'keyword' ? '' : 'none';
+  preview();
+}
+
+// ── SLASH OPTIONS ─────────────────────────────────────────────────────────────
+function addOpt() {
+  opts.push({ id: Date.now(), name:'', type:'string', description:'', required:false });
+  renderOpts();
+}
+function removeOpt(id) { opts = opts.filter(o => o.id !== id); renderOpts(); }
+function updOpt(id, k, v) { const o = opts.find(x => x.id === id); if (o) { o[k] = v; preview(); } }
+function renderOpts() {
+  document.getElementById('opts-list').innerHTML = opts.map(o => `
+    <div class="mcard mcard-opt">
+      <div class="mcard-hd"><span class="mtitle">Option</span><button class="xbtn" onclick="removeOpt(${o.id})">×</button></div>
+      <div class="frow"><div class="flabel">Name</div>
+        <input class="finput" value="${esc(o.name)}" placeholder="option_name" oninput="updOpt(${o.id},'name',this.value)"></div>
+      <div class="frow"><div class="flabel">Type</div>
+        <select class="fsel" onchange="updOpt(${o.id},'type',this.value)">
+          ${['string','integer','user','boolean','channel','role'].map(t=>`<option value="${t}"${o.type===t?' selected':''}>${t}</option>`).join('')}
+        </select></div>
+      <div class="frow"><div class="flabel">Description</div>
+        <input class="finput" value="${esc(o.description)}" placeholder="Describe this option" oninput="updOpt(${o.id},'description',this.value)"></div>
+      <label class="crow"><input type="checkbox" ${o.required?'checked':''} onchange="updOpt(${o.id},'required',this.checked)"><label>Required</label></label>
+    </div>`).join('');
+}
+
+// ── BUTTONS ──────────────────────────────────────────────────────────────────
+function addBtn() {
+  btns.push({ id: Date.now(), label:'Button', customId:`btn_${Date.now()}`, style:'Primary', actions:[] });
+  renderBtns();
+}
+function removeBtn(id) { btns = btns.filter(b => b.id !== id); renderBtns(); }
+function updBtn(id, k, v) { const b = btns.find(x => x.id === id); if (b) { b[k] = v; preview(); } }
+function setBtnAct(id, type) {
+  const b = btns.find(x => x.id === id);
+  if (b) { b.actions = [{ type, content:'', embedTitle:'', embedDescription:'', embedColor:'#6c63ff', embedFooter:'' }]; renderBtns(); preview(); }
+}
+function updBtnAct(id, k, v) {
+  const b = btns.find(x => x.id === id);
+  if (b) { if (!b.actions[0]) b.actions[0] = {}; b.actions[0][k] = v; preview(); }
+}
+function renderBtns() {
+  document.getElementById('btns-list').innerHTML = btns.map(b => {
+    const a   = b.actions[0] || {};
+    const isE = a.type && a.type.includes('embed');
+    return `
+    <div class="mcard mcard-btn">
+      <div class="mcard-hd"><span class="mtitle">Button</span><button class="xbtn" onclick="removeBtn(${b.id})">×</button></div>
+      <div class="frow"><div class="flabel">Label</div>
+        <input class="finput" value="${esc(b.label)}" oninput="updBtn(${b.id},'label',this.value)"></div>
+      <div class="frow"><div class="flabel">Custom ID <span class="fsub">unique</span></div>
+        <input class="finput" value="${esc(b.customId)}" oninput="updBtn(${b.id},'customId',this.value)"></div>
+      <div class="frow"><div class="flabel">Style</div>
+        <select class="fsel" onchange="updBtn(${b.id},'style',this.value)">
+          ${['Primary','Secondary','Success','Danger'].map(s=>`<option value="${s}"${b.style===s?' selected':''}>${s}</option>`).join('')}
+        </select></div>
+      <div class="frow"><div class="flabel">Button Action</div>
+        <select class="fsel" onchange="setBtnAct(${b.id},this.value)">
+          <option value="reply_text"${(!a.type||a.type==='reply_text')?' selected':''}>💬 Reply Text</option>
+          <option value="reply_embed"${a.type==='reply_embed'?' selected':''}>🎨 Reply Embed</option>
+        </select></div>
+      ${isE ? `
+      <div class="frow"><input class="finput" placeholder="Embed title" value="${esc(a.embedTitle||'')}" oninput="updBtnAct(${b.id},'embedTitle',this.value)"></div>
+      <div class="frow"><input class="finput" placeholder="Embed description" value="${esc(a.embedDescription||'')}" oninput="updBtnAct(${b.id},'embedDescription',this.value)"></div>`
+      : `<div class="frow"><textarea class="ftextarea" placeholder="Reply content…" oninput="updBtnAct(${b.id},'content',this.value)">${esc(a.content||'')}</textarea></div>`}
+    </div>`;
+  }).join('');
+}
+
+// ── CONDITIONS ────────────────────────────────────────────────────────────────
+function addCond() {
+  conds.push({ id:Date.now(), type: document.getElementById('nc-type').value, value:'', failMessage:'' });
+  renderConds();
+}
+function removeCond(id) { conds = conds.filter(c => c.id !== id); renderConds(); }
+function updCond(id, k, v) { const c = conds.find(x => x.id === id); if (c) { c[k] = v; preview(); } }
+const condLbl = { has_role:'Has Role', missing_role:'Missing Role', in_channel:'In Channel', is_admin:'Is Admin' };
+function renderConds() {
+  document.getElementById('cond-list').innerHTML = conds.map(c => `
+    <div class="mcard mcard-cond">
+      <div class="mcard-hd"><span class="mtitle">${condLbl[c.type]||c.type}</span><button class="xbtn" onclick="removeCond(${c.id})">×</button></div>
+      ${c.type !== 'is_admin' ? `<div class="frow"><div class="flabel">${c.type === 'in_channel' ? 'Channel name/ID' : 'Role name/ID'}</div>
+        <input class="finput" value="${esc(c.value)}" placeholder="${c.type==='in_channel'?'general':'Member'}" oninput="updCond(${c.id},'value',this.value)"></div>` : ''}
+      <div class="frow"><div class="flabel">Fail message</div>
+        <input class="finput" value="${esc(c.failMessage)}" placeholder="❌ You can't do that." oninput="updCond(${c.id},'failMessage',this.value)"></div>
+    </div>`).join('');
+}
+
+// ── ACTIONS ────────────────────────────────────────────────────────────────────
+function addAct() {
+  acts.push({ id:Date.now(), type: document.getElementById('na-type').value, content:'',
+    ephemeral:false, embedTitle:'', embedDescription:'', embedColor:'#6c63ff',
+    embedFooter:'', embedImage:'', embedThumbnail:'', channel:'' });
+  renderActs();
+}
+function removeAct(id) { acts = acts.filter(a => a.id !== id); renderActs(); }
+function updAct(id, k, v) { const a = acts.find(x => x.id === id); if (a) { a[k] = v; preview(); } }
+const actLbl = {
+  reply_text:'💬 Reply Text', reply_embed:'🎨 Reply Embed',
+  followup_text:'➕ Follow-up Text', followup_embed:'➕ Follow-up Embed',
+  send_to_channel:'📤 Text to Channel', send_embed_to_channel:'📤 Embed to Channel'
+};
+function renderActs() {
+  document.getElementById('act-list').innerHTML = acts.map(a => {
+    const isE  = a.type.includes('embed');
+    const isCh = a.type.includes('to_channel');
+    return `
+    <div class="mcard mcard-act">
+      <div class="mcard-hd"><span class="mtitle">${actLbl[a.type]||a.type}</span><button class="xbtn" onclick="removeAct(${a.id})">×</button></div>
+      ${isCh ? `<div class="frow"><div class="flabel">Channel name or ID</div>
+        <input class="finput" value="${esc(a.channel)}" placeholder="general" oninput="updAct(${a.id},'channel',this.value)"></div>` : ''}
+      ${isE ? `
+      <div class="frow"><div class="flabel">Title</div>
+        <input class="finput" value="${esc(a.embedTitle)}" placeholder="Embed title" oninput="updAct(${a.id},'embedTitle',this.value)"></div>
+      <div class="frow"><div class="flabel">Description</div>
+        <textarea class="ftextarea" placeholder="Embed description…" oninput="updAct(${a.id},'embedDescription',this.value)">${esc(a.embedDescription)}</textarea></div>
+      <div class="frow"><div class="flabel">Color</div>
+        <div class="color-pair">
+          <input class="finput" value="${esc(a.embedColor)}" placeholder="#6c63ff" oninput="updAct(${a.id},'embedColor',this.value)">
+          <input type="color" class="cprev" value="${a.embedColor||'#6c63ff'}" oninput="updAct(${a.id},'embedColor',this.value)">
+        </div></div>
+      <div class="frow"><div class="flabel">Footer</div>
+        <input class="finput" value="${esc(a.embedFooter)}" placeholder="Footer text" oninput="updAct(${a.id},'embedFooter',this.value)"></div>
+      <div class="frow"><div class="flabel">Image URL <span class="fsub">optional</span></div>
+        <input class="finput" value="${esc(a.embedImage)}" placeholder="https://i.imgur.com/…" oninput="updAct(${a.id},'embedImage',this.value)"></div>
+      ` : `<div class="frow"><div class="flabel">Content</div>
+        <textarea class="ftextarea" placeholder="Message content…" oninput="updAct(${a.id},'content',this.value)">${esc(a.content)}</textarea></div>`}
+      ${!isCh ? `<label class="crow"><input type="checkbox" ${a.ephemeral?'checked':''} onchange="updAct(${a.id},'ephemeral',this.checked)"><label>Ephemeral (only sender sees reply)</label></label>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── FLOW PREVIEW ──────────────────────────────────────────────────────────────
+function preview() {
+  clearTimeout(pTimer);
+  pTimer = setTimeout(_renderPreview, 160);
+}
+
+function _renderPreview() {
+  const name = document.getElementById('cn').value.trim();
+  const canvas = document.getElementById('canvas');
+  const empty  = document.getElementById('c-empty');
+  canvas.querySelectorAll('.fnode,.farrow').forEach(e => e.remove());
+  if (!name) { empty.style.display = 'flex'; return; }
+  empty.style.display = 'none';
+
+  const ttype = document.getElementById('ttype').value;
+  const nodes = [];
+
+  // Trigger node
+  const tIcons = { slash:'⚡', button:'🔘', keyword:'💬' };
+  const tNames = { slash:'Slash Command', button:'Button Click', keyword:'Keyword Match' };
+  const tFields = [{ k:'Command', v: `/${name}` }];
+  if (ttype === 'slash' && opts.length) tFields.push({ k:'Options', v: opts.map(o=>o.name||'?').join(', ') });
+  if (ttype === 'button') {
+    const p = document.getElementById('t-prompt').value;
+    if (p) tFields.push({ k:'Prompt', v: p });
+    if (btns.length) tFields.push({ k:'Buttons', v: btns.map(b=>b.label).join(', ') });
+  }
+  if (ttype === 'keyword') {
+    const kw = document.getElementById('t-kw').value;
+    if (kw) tFields.push({ k:'Keywords', v: kw });
+    tFields.push({ k:'Match', v: document.getElementById('t-mt').value });
+  }
+  nodes.push({ cls:'fn-trig', icon: tIcons[ttype], name: tNames[ttype], type:'trigger', fields: tFields });
+
+  // Condition nodes
+  conds.forEach(c => {
+    const ln = { has_role:'👤 Has Role', missing_role:'🚫 Missing Role', in_channel:'📍 In Channel', is_admin:'🛡 Is Admin' };
+    const f  = c.value ? [{ k:'Value', v: c.value }] : [];
+    nodes.push({ cls:'fn-cond', icon:'⚙️', name: ln[c.type]||c.type, type:'condition', fields: f });
+  });
+
+  // Action nodes
+  acts.forEach(a => {
+    const f = [];
+    if (a.type.includes('embed')) {
+      if (a.embedTitle) f.push({ k:'Title', v: a.embedTitle });
+      if (a.embedDescription) f.push({ k:'Desc', v: a.embedDescription.slice(0,40)+(a.embedDescription.length>40?'…':'') });
+      if (a.embedColor) f.push({ k:'Color', v: a.embedColor });
+    } else {
+      if (a.content) f.push({ k:'Content', v: a.content.slice(0,48)+(a.content.length>48?'…':'') });
+    }
+    if (a.channel) f.push({ k:'Channel', v: a.channel });
+    if (a.ephemeral) f.push({ k:'Ephemeral', v:'yes' });
+    nodes.push({ cls:'fn-act', icon:'✅', name: actLbl[a.type]||a.type, type:'action', fields: f });
+  });
+
+  let html = '';
+  nodes.forEach((n, i) => {
+    html += `<div class="fnode ${n.cls}">
+      <div class="fnode-hd"><span class="ni">${n.icon}</span><div><div class="nname">${n.name}</div><div class="ntype">${n.type}</div></div></div>
+      <div class="fnode-body">${n.fields.map(f=>`<div class="nfield"><span class="nfk">${f.k}</span><span class="nfv">${esc(f.v)}</span></div>`).join('')}</div>
+    </div>`;
+    if (i < nodes.length - 1) html += '<div class="farrow"></div>';
+  });
+  canvas.insertAdjacentHTML('afterbegin', html);
+}
+
+// ── CODE GEN ─────────────────────────────────────────────────────────────────
+function buildFlow() {
+  const ttype = document.getElementById('ttype').value;
+  const name  = document.getElementById('cn').value.trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9_-]/g,'').slice(0,32);
+  const desc  = document.getElementById('cd').value.trim() || 'No description';
+  const trig  = { type: ttype };
+
+  if (ttype === 'slash') {
+    trig.cooldown = parseInt(document.getElementById('t-cd').value,10) || 3;
+    trig.options  = opts;
+  } else if (ttype === 'button') {
+    trig.promptMessage = document.getElementById('t-prompt').value || 'Choose an option:';
+    trig.timeout       = parseInt(document.getElementById('t-timeout').value,10) || 60;
+    trig.buttons       = btns.map(b => ({
+      label: b.label, customId: b.customId, style: b.style,
+      actions: b.actions.length ? b.actions : [{ type:'reply_text', content:`You clicked ${b.label}` }]
+    }));
+  } else {
+    trig.keywords   = document.getElementById('t-kw').value.split(',').map(k=>k.trim().toLowerCase()).filter(Boolean);
+    trig.matchType  = document.getElementById('t-mt').value;
+    trig.channel    = document.getElementById('t-ch').value.trim() || null;
+    trig.ignoreBots = document.getElementById('t-ib').checked;
+  }
+
+  return { commandName: name, commandDesc: desc, trigger: trig, conditions: conds, actions: acts };
+}
+
+async function genCode() {
+  const flow = buildFlow();
+  if (!flow.commandName) { toast('Enter a command name', 'err'); return; }
+
+  const r = await api('/api/flow/generate', { method:'POST', body: JSON.stringify(flow) });
+  const d = await r.json();
+  if (d.success) {
+    document.getElementById('code-out').value = d.code;
+    document.getElementById('dname').value    = flow.commandName;
+    toast('Code generated!', 'ok');
+  } else {
+    toast('Error: ' + d.error, 'err');
+  }
+}
+
+async function deploy() {
+  const code = document.getElementById('code-out').value;
+  const name = document.getElementById('dname').value.trim();
+  if (!code) { toast('Generate code first', 'err'); return; }
+  if (!name) { toast('Enter a command name', 'err'); return; }
+
+  const btn = document.getElementById('dbtn');
+  const res = document.getElementById('dres');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Deploying…';
+
+  // Include the flow object so it can be re-edited later
+  let flow = null;
+  try { flow = buildFlow(); } catch(_) {}
+
+  const r = await api('/api/flow/deploy', { method:'POST', body: JSON.stringify({ flow, code }) });
+  const d = await r.json();
+
+  btn.disabled = false;
+  btn.innerHTML = '🚀 Save &amp; Deploy to Discord';
+
+  if (d.success) {
+    res.className = 'dres ok';
+    const guilds = d.guilds?.map(g => `  ${g.action === 'created' ? '✅' : '🔄'} Guild ${g.guild}`).join('\n') || '';
+    res.textContent = `✅ /${name} saved to MongoDB & registered on Discord!\n\n${guilds}`;
+    toast(`/${name} is live on Discord!`, 'ok');
+    loadStats();
+  } else {
+    res.className = 'dres err';
+    res.textContent = '❌ ' + (d.error || 'Unknown error');
+    toast('Deploy failed', 'err');
+  }
+}
+
+function copyCode() {
+  const v = document.getElementById('code-out').value;
+  if (!v) { toast('Nothing to copy', 'err'); return; }
+  navigator.clipboard.writeText(v);
+  toast('Copied!', 'ok');
+}
+
+// ── TOASTS ───────────────────────────────────────────────────────────────────
+function toast(msg, type = 'inf') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtUp(s) {
+  if (!s) return '0s';
+  const d=Math.floor(s/86400), h=Math.floor((s%86400)/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  const p=[];
+  if(d)p.push(`${d}d`); if(h)p.push(`${h}h`); if(m)p.push(`${m}m`); if(!p.length||sec)p.push(`${sec}s`);
+  return p.join(' ');
+}
+</script>
+</body>
+</html>

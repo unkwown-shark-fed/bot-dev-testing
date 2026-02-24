@@ -3,8 +3,8 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
-
 const config = require('./config.json');
+const db = require('./db');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -24,9 +24,8 @@ const client = new Client({
 
 client.config = config;
 client.commands = new Collection();
-client.cooldowns = new Collection(); // NEW: Track command cooldowns per user
+client.cooldowns = new Collection();
 
-// NEW: Command usage statistics
 client.stats = {
   commandsExecuted: 0,
   errors: 0,
@@ -39,12 +38,14 @@ const commandsPath = path.join(__dirname, 'commands');
 if (!fs.existsSync(commandsPath)) fs.mkdirSync(commandsPath, { recursive: true });
 
 let loadedCount = 0;
+
+// 1. Load file-based commands
 for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
   try {
     const cmd = require(path.join(commandsPath, file));
     if (cmd?.data?.name && typeof cmd.execute === 'function') {
       client.commands.set(cmd.data.name, cmd);
-      client.stats.commandUsage[cmd.data.name] = 0; // Initialize usage counter
+      client.stats.commandUsage[cmd.data.name] = 0;
       loadedCount++;
     } else {
       logger.warn(`Command file ${file} is missing data.name or execute`);
@@ -54,13 +55,44 @@ for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) 
   }
 }
 
-// NEW: Set bot status with command count
+// 2. Load dashboard-created commands from MongoDB
+(async () => {
+  try {
+    await db.connect();
+    const dbCmds = await db.getAllCommands();
+    let dbCount = 0;
+    for (const record of dbCmds) {
+      if (record.source !== 'dashboard' || !record.code) continue;
+      if (client.commands.has(record.name)) continue; // file version takes priority
+      try {
+        const Module = require('module');
+        const m = new Module('');
+        m.filename = path.join(commandsPath, `${record.name}.js`);
+        m.paths = Module._nodeModulePaths(commandsPath);
+        m._compile(record.code, `${record.name}.js`);
+        const cmd = m.exports;
+        if (cmd?.data?.name && typeof cmd.execute === 'function') {
+          client.commands.set(cmd.data.name, cmd);
+          client.stats.commandUsage[cmd.data.name] = 0;
+          dbCount++;
+          loadedCount++;
+        }
+      } catch (e) {
+        logger.warn(`Failed to load DB command ${record.name}: ${e.message}`);
+      }
+    }
+    logger.info(`📦 Loaded ${dbCount} dashboard commands from MongoDB`);
+  } catch (e) {
+    logger.error(`MongoDB load failed: ${e.message} — continuing with file commands only`);
+  }
+})();
+
+// Set bot status with command count
 client.once('ready', async () => {
   logger.info(`✅ Logged in as ${client.user.tag}`);
   logger.info(`📊 Loaded ${loadedCount} commands: ${Array.from(client.commands.keys()).join(', ')}`);
   logger.info(`🌐 Serving ${client.guilds.cache.size} guild(s)`);
-  
-  // Set dynamic status
+
   client.user.setActivity(`${loadedCount} commands | /help`, { type: ActivityType.Watching });
 });
 
@@ -78,7 +110,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.reply({ content: '❌ Command not found.', ephemeral: true });
   }
 
-  // NEW: Cooldown system
+  // Cooldown system
   if (command.cooldown) {
     const { cooldowns } = client;
     if (!cooldowns.has(command.data.name)) {
@@ -93,9 +125,9 @@ client.on('interactionCreate', async interaction => {
       const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
       if (now < expirationTime) {
         const timeLeft = ((expirationTime - now) / 1000).toFixed(1);
-        return interaction.reply({ 
-          content: `⏱️ Please wait ${timeLeft}s before using \`/${command.data.name}\` again.`, 
-          ephemeral: true 
+        return interaction.reply({
+          content: `⏱️ Please wait ${timeLeft}s before using \`/${command.data.name}\` again.`,
+          ephemeral: true
         });
       }
     }
@@ -113,9 +145,9 @@ client.on('interactionCreate', async interaction => {
       const hasRole = member.roles?.cache?.has?.(requiredRoleId);
       if (!isAdmin && !hasRole) {
         logger.warn(`Unauthorized access attempt by ${interaction.user.tag} for /${interaction.commandName}`);
-        return interaction.reply({ 
-          content: '🔒 You are not authorized to run this command (missing required role).', 
-          ephemeral: true 
+        return interaction.reply({
+          content: '🔒 You are not authorized to run this command (missing required role).',
+          ephemeral: true
         });
       }
     } catch (err) {
@@ -124,19 +156,20 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // Execute command with enhanced error handling
+  // Execute command
   try {
     await command.execute(interaction, client, logger);
-    
-    // NEW: Track successful execution
+
     client.stats.commandsExecuted++;
     client.stats.commandUsage[command.data.name]++;
-    
+    db.incrementUsage(interaction.commandName).catch(() => {});
+
     logger.info(`✅ ${interaction.user.tag} used /${interaction.commandName} in ${interaction.guild?.name || 'DM'}`);
   } catch (err) {
     client.stats.errors++;
+    db.incrementError(interaction.commandName).catch(() => {});
     logger.error(`❌ Error executing /${interaction.commandName} by ${interaction.user.tag}: ${err.stack || err}`);
-    
+
     const errorMsg = '⚠️ There was an error while executing this command.';
     try {
       if (interaction.deferred) {
@@ -152,7 +185,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// NEW: Log when bot joins/leaves guilds
+// Log when bot joins/leaves guilds
 client.on('guildCreate', guild => {
   logger.info(`✨ Joined new guild: ${guild.name} (${guild.id}) - ${guild.memberCount} members`);
 });

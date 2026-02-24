@@ -1,303 +1,518 @@
-const express = require('express');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const WebSocket = require('ws');
+/**
+ * dashboard-premium.js  —  Bot Studio v2.1 (MongoDB Edition)
+ *
+ * Commands are stored in MongoDB Atlas, not files.
+ * Deploy = register directly to Discord API. No git push needed.
+ *
+ * NEW ENV VARS REQUIRED:
+ *   MONGODB_URI=mongodb+srv://...
+ *   CLIENT_ID=your-discord-app-client-id
+ *   GUILD_IDS=guildId1,guildId2,...
+ *   DISCORD_TOKEN=...
+ *   DASHBOARD_PASSWORD=...
+ */
 
+'use strict';
+require('dotenv').config();
+
+const express      = require('express');
+const { spawn }    = require('child_process');
+const fs           = require('fs');
+const path         = require('path');
+const WebSocket    = require('ws');
+const { REST, Routes } = require('discord.js');
+const db           = require('./db');
+
+// ── Config ────────────────────────────────────────────────────────────────────
+const PORT      = parseInt(process.env.WEB_DASHBOARD_PORT || '3000', 10);
+const PASSWORD  = process.env.DASHBOARD_PASSWORD || 'admin123';
+const ROOT      = __dirname;
+const CMD_DIR   = path.join(ROOT, 'commands');
+const LOG_DIR   = path.join(ROOT, 'logs');
+const TOKEN     = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+// ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
-const PORT = process.env.WEB_DASHBOARD_PORT || 3000;
-const PASSWORD = process.env.DASHBOARD_PASSWORD || 'admin123';
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(ROOT, 'public')));
+app.get('/', (_req, res) => res.sendFile(path.join(ROOT, 'public', 'premium.html')));
 
-let botProcess = null;
-let botStatus = 'stopped';
-let botLogs = [];
-const MAX_LOG_LINES = 500;
-
-// Middleware
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Serve dashboard
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Authentication
-function authenticate(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || auth !== `Bearer ${PASSWORD}`) {
+function auth(req, res, next) {
+  if ((req.headers.authorization || '') !== `Bearer ${PASSWORD}`)
     return res.status(401).json({ error: 'Unauthorized' });
-  }
   next();
 }
 
-// Login
-app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  if (password === PASSWORD) {
-    res.json({ success: true, token: PASSWORD });
-  } else {
-    res.status(401).json({ error: 'Invalid password' });
-  }
-});
+// ── Bot process ───────────────────────────────────────────────────────────────
+let botProcess = null;
+let botStatus  = 'stopped';
+let botLogs    = [];
+const MAX_LOGS = 500;
 
-// Bot status
-app.get('/api/status', authenticate, (req, res) => {
-  res.json({
-    status: botStatus,
-    uptime: botProcess ? Math.floor((Date.now() - botProcess.startTime) / 1000) : 0,
-    pid: botProcess ? botProcess.pid : null
-  });
-});
+function addLog(type, message) {
+  botLogs.push({ timestamp: new Date().toISOString(), type, message: message.trim() });
+  if (botLogs.length > MAX_LOGS) botLogs = botLogs.slice(-MAX_LOGS);
+}
+function broadcast(type, data) {
+  wss?.clients?.forEach(c => c.readyState === 1 && c.send(JSON.stringify({ type, data })));
+}
 
-// Start bot
-app.post('/api/start', authenticate, (req, res) => {
-  if (botProcess && botStatus === 'running') {
-    return res.status(400).json({ error: 'Bot is already running' });
-  }
-
-  try {
-    botProcess = spawn('node', ['index.js'], {
-      cwd: __dirname,
-      env: { ...process.env, FORCE_COLOR: '1' }
-    });
-
-    botProcess.startTime = Date.now();
-    botStatus = 'running';
-
-    botProcess.stdout.on('data', (data) => {
-      const logLine = data.toString();
-      addLog('info', logLine);
-      broadcastLog('info', logLine);
-    });
-
-    botProcess.stderr.on('data', (data) => {
-      const logLine = data.toString();
-      addLog('error', logLine);
-      broadcastLog('error', logLine);
-    });
-
-    botProcess.on('close', (code) => {
-      botStatus = 'stopped';
-      const exitLog = `Bot process exited with code ${code}`;
-      addLog('info', exitLog);
-      broadcastLog('info', exitLog);
-      botProcess = null;
-    });
-
-    res.json({ success: true, message: 'Bot started successfully' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Stop bot
-app.post('/api/stop', authenticate, (req, res) => {
-  if (!botProcess || botStatus === 'stopped') {
-    return res.status(400).json({ error: 'Bot is not running' });
-  }
-
-  try {
-    botProcess.kill('SIGTERM');
-    botStatus = 'stopping';
-    res.json({ success: true, message: 'Bot stopping...' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get logs
-app.get('/api/logs', authenticate, (req, res) => {
-  const limit = parseInt(req.query.limit) || 100;
-  res.json({ logs: botLogs.slice(-limit) });
-});
-
-// Get bot stats
-app.get('/api/stats', authenticate, (req, res) => {
-  const configPath = path.join(__dirname, 'config.json');
-  const packagePath = path.join(__dirname, 'package.json');
-
-  let stats = {
-    version: '2.0.0',
-    commands: 17,
-    guilds: 0,
-    uptime: 0
+function spawnBot() {
+  botProcess = spawn('node', ['index.js'], { cwd: ROOT, env: { ...process.env } });
+  botProcess.startTime = Date.now();
+  botStatus = 'running';
+  const fwd = (type) => (d) => {
+    const l = d.toString();
+    addLog(type, l);
+    broadcast('log', { type, message: l, timestamp: new Date().toISOString() });
   };
+  botProcess.stdout.on('data', fwd('info'));
+  botProcess.stderr.on('data', fwd('error'));
+  botProcess.on('close', code => {
+    botStatus = 'stopped'; botProcess = null;
+    addLog('info', `Bot exited with code ${code}`);
+    broadcast('log', { type:'info', message: `Bot exited (code ${code})`, timestamp: new Date().toISOString() });
+    broadcast('status', { status: 'stopped' });
+  });
+  broadcast('status', { status: 'running' });
+}
 
+// ── Auth & Status ─────────────────────────────────────────────────────────────
+app.post('/api/login', (req, res) =>
+  res.json(req.body?.password === PASSWORD
+    ? { success: true, token: PASSWORD }
+    : { error: 'Invalid password' })
+);
+
+app.get('/api/status', auth, (req, res) => res.json({
+  status: botStatus,
+  uptime: botProcess ? Math.floor((Date.now() - botProcess.startTime) / 1000) : 0,
+  pid:    botProcess?.pid ?? null,
+}));
+
+app.post('/api/start', auth, (_req, res) => {
+  if (botStatus === 'running') return res.status(400).json({ error: 'Already running' });
+  try { spawnBot(); res.json({ success: true, message: 'Bot started' }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/stop', auth, (_req, res) => {
+  if (!botProcess) return res.status(400).json({ error: 'Not running' });
+  botProcess.kill('SIGTERM');
+  botStatus = 'stopping';
+  res.json({ success: true, message: 'Stopping…' });
+});
+
+app.post('/api/restart', auth, async (_req, res) => {
+  if (botProcess) { botProcess.kill('SIGTERM'); await new Promise(r => setTimeout(r, 1500)); }
+  res.json({ success: true, message: 'Restarting…' });
+  setTimeout(() => { if (botStatus !== 'running') spawnBot(); }, 600);
+});
+
+app.get('/api/logs', auth, (req, res) =>
+  res.json({ logs: botLogs.slice(-(parseInt(req.query.limit) || 100)) })
+);
+
+app.get('/api/log-files', auth, (_req, res) => {
   try {
-    if (fs.existsSync(packagePath)) {
-      const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-      stats.version = pkg.version;
-    }
+    if (!fs.existsSync(LOG_DIR)) return res.json({ files: [] });
+    const files = fs.readdirSync(LOG_DIR)
+      .filter(f => f.endsWith('.log'))
+      .map(f => { const s = fs.statSync(path.join(LOG_DIR, f)); return { name: f, size: s.size, modified: s.mtime }; })
+      .sort((a, b) => b.modified - a.modified);
+    res.json({ files });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      stats.guilds = config.allowedGuilds?.length || 0;
-    }
-
-    const commandsDir = path.join(__dirname, 'commands');
-    if (fs.existsSync(commandsDir)) {
-      stats.commands = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js')).length;
-    }
-
-    if (botProcess && botStatus === 'running') {
-      stats.uptime = Math.floor((Date.now() - botProcess.startTime) / 1000);
-    }
-  } catch (err) {
-    console.error('Error getting stats:', err);
-  }
-
+// ── Stats ─────────────────────────────────────────────────────────────────────
+app.get('/api/stats', auth, async (_req, res) => {
+  let stats = { version: '2.1.0', totalCommands: 0, fileCommands: 0, dbCommands: 0, guilds: GUILD_IDS.length, uptime: 0 };
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    stats.version = pkg.version || '2.1.0';
+  } catch (_) {}
+  try {
+    const all = await db.getAllCommands();
+    stats.totalCommands = all.length;
+    stats.fileCommands  = all.filter(c => c.source === 'file').length;
+    stats.dbCommands    = all.filter(c => c.source === 'dashboard').length;
+  } catch (_) {}
+  if (botProcess) stats.uptime = Math.floor((Date.now() - botProcess.startTime) / 1000);
   res.json(stats);
 });
 
-// Save generated command
-app.post('/api/save-command', authenticate, (req, res) => {
-  try {
-    const { name, code } = req.body;
-    
-    if (!name || !code) {
-      return res.status(400).json({ error: 'Name and code required' });
-    }
-
-    // Validate name
-    if (!/^[a-z0-9_-]+$/.test(name)) {
-      return res.status(400).json({ error: 'Invalid command name. Use lowercase letters, numbers, hyphens, and underscores only.' });
-    }
-
-    const commandPath = path.join(__dirname, 'commands', `${name}.js`);
-    
-    // Check if file exists
-    if (fs.existsSync(commandPath)) {
-      return res.status(400).json({ error: 'Command already exists. Choose a different name.' });
-    }
-
-    // Save file
-    fs.writeFileSync(commandPath, code, 'utf8');
-
-    res.json({ success: true, message: `Command saved as ${name}.js`, path: commandPath });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// ── Commands CRUD ─────────────────────────────────────────────────────────────
+app.get('/api/commands', auth, async (_req, res) => {
+  try { res.json({ commands: await db.getAllCommands() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// List commands
-app.get('/api/commands', authenticate, (req, res) => {
+app.get('/api/commands/:name', auth, async (req, res) => {
   try {
-    const commandsDir = path.join(__dirname, 'commands');
-    const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'));
-    
-    const commands = files.map(file => {
-      const filepath = path.join(commandsDir, file);
-      const stat = fs.statSync(filepath);
-      return {
-        name: file.replace('.js', ''),
-        filename: file,
-        size: stat.size,
-        modified: stat.mtime
-      };
+    const cmd = await db.getCommand(req.params.name);
+    if (!cmd) return res.status(404).json({ error: 'Not found' });
+    res.json({ command: cmd });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/commands/:name', auth, async (req, res) => {
+  try {
+    const cmd = await db.getCommand(req.params.name);
+    if (!cmd) return res.status(404).json({ error: 'Not found' });
+
+    // Remove from file system if exists
+    const fp = path.join(CMD_DIR, `${req.params.name}.js`);
+    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+
+    await db.deleteCommand(req.params.name);
+
+    // Unregister from Discord
+    if (TOKEN && CLIENT_ID && GUILD_IDS.length) {
+      try {
+        const rest = new REST({ version: '10' }).setToken(TOKEN);
+        for (const gid of GUILD_IDS) {
+          const existing = await rest.get(Routes.applicationGuildCommands(CLIENT_ID, gid));
+          const match = existing.find(c => c.name === req.params.name);
+          if (match) await rest.delete(Routes.applicationGuildCommand(CLIENT_ID, gid, match.id));
+        }
+      } catch (_) {}
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Flow: Generate code preview ───────────────────────────────────────────────
+app.post('/api/flow/generate', auth, (req, res) => {
+  try { res.json({ success: true, code: generateFlowCode(req.body) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ── Flow: Save to MongoDB + Register to Discord directly ──────────────────────
+app.post('/api/flow/deploy', auth, async (req, res) => {
+  const { flow, code } = req.body || {};
+  if (!flow || !code) return res.status(400).json({ error: 'flow and code are required' });
+
+  const name = sanitizeName(flow.commandName);
+  if (!name) return res.status(400).json({ error: 'Invalid command name' });
+  if (!TOKEN) return res.status(400).json({ error: 'DISCORD_TOKEN missing in .env' });
+  if (!CLIENT_ID) return res.status(400).json({ error: 'CLIENT_ID missing in .env' });
+  if (!GUILD_IDS.length) return res.status(400).json({ error: 'GUILD_IDS missing in .env' });
+
+  // Validate generated code
+  let cmdModule;
+  try { cmdModule = loadModuleFromString(code); }
+  catch (e) { return res.status(400).json({ error: `Code syntax error: ${e.message}` }); }
+  if (!cmdModule?.data?.toJSON)
+    return res.status(400).json({ error: 'Generated code missing valid data property' });
+
+  const cmdJson = cmdModule.data.toJSON();
+
+  try {
+    // 1. Register to Discord (no file system needed!)
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+    const results = [];
+    for (const gid of GUILD_IDS) {
+      const existing = await rest.get(Routes.applicationGuildCommands(CLIENT_ID, gid));
+      const match    = existing.find(c => c.name === name);
+      const discordCmd = match
+        ? await rest.patch(Routes.applicationGuildCommand(CLIENT_ID, gid, match.id), { body: cmdJson })
+        : await rest.post(Routes.applicationGuildCommands(CLIENT_ID, gid), { body: cmdJson });
+      results.push({ guild: gid, id: discordCmd.id, action: match ? 'updated' : 'created' });
+    }
+
+    // 2. Save to MongoDB
+    await db.upsertCommand(name, {
+      name,
+      description: flow.commandDesc || cmdJson.description || 'No description',
+      source:      'dashboard',
+      flow,
+      code,
+      registered:   true,
+      registeredAt: new Date(),
     });
 
-    res.json({ commands });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    // 3. Also write .js file so bot's require() can load it at runtime
+    if (!fs.existsSync(CMD_DIR)) fs.mkdirSync(CMD_DIR, { recursive: true });
+    fs.writeFileSync(path.join(CMD_DIR, `${name}.js`), code, 'utf8');
+
+    res.json({ success: true, message: `✅ /${name} saved to MongoDB & registered!`, guilds: results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Delete command
-app.delete('/api/commands/:name', authenticate, (req, res) => {
-  try {
-    const { name } = req.params;
-    const commandPath = path.join(__dirname, 'commands', `${name}.js`);
-    
-    if (!fs.existsSync(commandPath)) {
-      return res.status(404).json({ error: 'Command not found' });
+// ── Sync all /commands files into MongoDB ─────────────────────────────────────
+app.post('/api/sync', auth, async (_req, res) => {
+  const files  = fs.existsSync(CMD_DIR) ? fs.readdirSync(CMD_DIR).filter(f => f.endsWith('.js')) : [];
+  const loaded = [];
+  const failed = [];
+
+  for (const file of files) {
+    try {
+      const fp = path.join(CMD_DIR, file);
+      delete require.cache[require.resolve(fp)];
+      const mod = require(fp);
+      if (mod?.data?.name) loaded.push({ name: mod.data.name, description: mod.data.description || '' });
+    } catch (e) { failed.push({ file, error: e.message }); }
+  }
+
+  await db.syncFileCommands(loaded);
+
+  // Register ALL commands (file + dashboard) to Discord
+  const results = { guilds: [], errors: [] };
+  if (TOKEN && CLIENT_ID && GUILD_IDS.length) {
+    try {
+      const rest    = new REST({ version: '10' }).setToken(TOKEN);
+      const allCmds = await db.getAllCommands();
+      const jsonCmds = [];
+
+      for (const cmd of allCmds) {
+        try {
+          const fp = path.join(CMD_DIR, `${cmd.name}.js`);
+          if (!fs.existsSync(fp)) continue;
+          delete require.cache[require.resolve(fp)];
+          const mod = require(fp);
+          if (mod?.data?.toJSON) jsonCmds.push(mod.data.toJSON());
+        } catch (_) {}
+      }
+
+      for (const gid of GUILD_IDS) {
+        const r = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, gid), { body: jsonCmds });
+        results.guilds.push({ guild: gid, registered: r.length });
+      }
+    } catch (e) { results.errors.push(e.message); }
+  }
+
+  res.json({
+    success: true,
+    synced:  loaded.length,
+    failed,
+    guilds:  results.guilds,
+    message: `Synced ${loaded.length} commands to MongoDB${results.guilds.length ? ' and re-registered all to Discord' : ''}`,
+  });
+});
+
+// ── Helper: load module from code string ──────────────────────────────────────
+function loadModuleFromString(code) {
+  const Module = require('module');
+  const m = new Module('');
+  m.filename = path.join(CMD_DIR || ROOT, '_preview.js');
+  m.paths = Module._nodeModulePaths(CMD_DIR || ROOT);
+  m._compile(code, '_preview.js');
+  return m.exports;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  CODE GENERATOR
+// ═════════════════════════════════════════════════════════════════════════════
+
+function sanitizeName(n) {
+  return String(n || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+}
+function j(v) { return JSON.stringify(String(v ?? '')); }
+function needsEmbed(actions) { return actions.some(a => a.type?.includes('embed')); }
+
+function embedBlock(a, ind) {
+  const lines = [`${ind}const embed = new EmbedBuilder()`];
+  if (a.embedTitle)       lines.push(`${ind}  .setTitle(${j(a.embedTitle)})`);
+  if (a.embedDescription) lines.push(`${ind}  .setDescription(${j(a.embedDescription)})`);
+  if (a.embedColor)       lines.push(`${ind}  .setColor(${j(a.embedColor)})`);
+  if (a.embedFooter)      lines.push(`${ind}  .setFooter({ text: ${j(a.embedFooter)} })`);
+  if (a.embedImage)       lines.push(`${ind}  .setImage(${j(a.embedImage)})`);
+  if (a.embedThumbnail)   lines.push(`${ind}  .setThumbnail(${j(a.embedThumbnail)})`);
+  lines[lines.length - 1] += ';';
+  return lines.join('\n');
+}
+
+function buildConditions(conditions) {
+  return conditions.map(c => {
+    const fail = j(c.failMessage || '❌ You do not have permission to use this command.');
+    switch (c.type) {
+      case 'has_role':     return `    if (!interaction.member?.roles?.cache?.some(r => r.name === ${j(c.value)} || r.id === ${j(c.value)}))\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'missing_role': return `    if (interaction.member?.roles?.cache?.some(r => r.name === ${j(c.value)} || r.id === ${j(c.value)}))\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'in_channel':   return `    if (interaction.channel?.name !== ${j(c.value)} && interaction.channelId !== ${j(c.value)})\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'is_admin':     return `    if (!interaction.member?.permissions?.has('Administrator'))\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      default: return '';
     }
+  }).filter(Boolean).join('\n\n');
+}
 
-    fs.unlinkSync(commandPath);
-    res.json({ success: true, message: `Command ${name} deleted` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get command content
-app.get('/api/commands/:name/content', authenticate, (req, res) => {
-  try {
-    const { name } = req.params;
-    const commandPath = path.join(__dirname, 'commands', `${name}.js`);
-    
-    if (!fs.existsSync(commandPath)) {
-      return res.status(404).json({ error: 'Command not found' });
+function buildActions(actions, ind = '    ') {
+  return actions.map(a => {
+    const eph = a.ephemeral ? ', ephemeral: true' : '';
+    switch (a.type) {
+      case 'reply_text':   return `${ind}await interaction.reply({ content: ${j(a.content || '')}${eph} });`;
+      case 'reply_embed':  return embedBlock(a, ind) + `\n${ind}await interaction.reply({ embeds: [embed]${eph} });`;
+      case 'followup_text': return `${ind}await interaction.followUp({ content: ${j(a.content || '')}${eph} });`;
+      case 'followup_embed': return embedBlock(a, ind) + `\n${ind}await interaction.followUp({ embeds: [embed]${eph} });`;
+      case 'send_to_channel':
+        return `${ind}{\n${ind}  const _ch = interaction.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n${ind}  if (_ch?.isTextBased?.()) await _ch.send({ content: ${j(a.content||'')} });\n${ind}}`;
+      case 'send_embed_to_channel':
+        return `${ind}{\n${embedBlock(a, ind+'  ')}\n${ind}  const _ch = interaction.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n${ind}  if (_ch?.isTextBased?.()) await _ch.send({ embeds: [embed] });\n${ind}}`;
+      default: return '';
     }
+  }).filter(Boolean).join('\n\n');
+}
 
-    const content = fs.readFileSync(commandPath, 'utf8');
-    res.json({ content });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-function addLog(type, message) {
-  const timestamp = new Date().toISOString();
-  botLogs.push({ timestamp, type, message: message.trim() });
-  
-  if (botLogs.length > MAX_LOG_LINES) {
-    botLogs = botLogs.slice(-MAX_LOG_LINES);
+function generateFlowCode(flow) {
+  const { trigger, conditions = [], actions = [], commandName, commandDesc } = flow;
+  if (!trigger) throw new Error('Trigger is required');
+  const name = sanitizeName(commandName);
+  if (!name)  throw new Error('Command name is empty or invalid');
+  switch (trigger.type) {
+    case 'slash':   return genSlash(name, commandDesc, trigger, conditions, actions);
+    case 'button':  return genButton(name, commandDesc, trigger, conditions, actions);
+    case 'keyword': return genKeyword(name, commandDesc, trigger, conditions, actions);
+    default: throw new Error('Unknown trigger type: ' + trigger.type);
   }
 }
 
-function broadcastLog(type, message) {
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'log',
-        data: { timestamp: new Date().toISOString(), type, message: message.trim() }
-      }));
+function genSlash(name, desc, trigger, conditions, actions) {
+  const imp    = needsEmbed(actions) ? 'SlashCommandBuilder, EmbedBuilder' : 'SlashCommandBuilder';
+  const opts   = (trigger.options || []).filter(o => sanitizeName(o.name));
+  const optLines = opts.map(o => {
+    const n = j(sanitizeName(o.name)), d = j(o.description || o.name);
+    const req = `\n        .setRequired(${!!o.required})`;
+    switch (o.type) {
+      case 'string':  return `    .addStringOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'integer': return `    .addIntegerOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'user':    return `    .addUserOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'boolean': return `    .addBooleanOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'channel': return `    .addChannelOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'role':    return `    .addRoleOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      default: return '';
     }
-  });
+  }).filter(Boolean).join('\n');
+  const cond = buildConditions(conditions);
+  const act  = buildActions(actions);
+  const cool = parseInt(trigger.cooldown, 10) || 3;
+  return `const { ${imp} } = require('discord.js');
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName(${j(name)})
+    .setDescription(${j(desc || 'No description')})${optLines ? '\n' + optLines : ''},
+  cooldown: ${cool},
+
+  async execute(interaction, _client, _logger) {
+    try {
+${cond ? cond + '\n\n' : ''}${act}
+    } catch (err) {
+      _logger?.error?.(\`/${name} error: \${err.message}\`);
+      const m = '⚠️ Something went wrong.';
+      if (interaction.deferred) await interaction.editReply(m).catch(() => {});
+      else if (!interaction.replied) await interaction.reply({ content: m, ephemeral: true }).catch(() => {});
+    }
+  },
+};
+`;
 }
 
-const server = app.listen(PORT, () => {
-  console.log(`\n🎨 Premium Dashboard running on http://localhost:${PORT}`);
-  console.log(`📱 Access from phone: http://YOUR-IP:${PORT}`);
-  console.log(`🔐 Default password: ${PASSWORD}`);
-  console.log(`⚙️  Change password in .env: DASHBOARD_PASSWORD=your_password\n`);
-});
+function genButton(name, desc, trigger, conditions, actions) {
+  const allActs = [...actions, ...(trigger.buttons || []).flatMap(b => b.actions || [])];
+  const imp  = (needsEmbed(allActs) ? 'EmbedBuilder, ' : '') + 'SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle';
+  const cool = parseInt(trigger.cooldown, 10) || 3;
+  const tms  = (parseInt(trigger.timeout, 10) || 60) * 1000;
+  const cond = buildConditions(conditions);
+  const btnDefs = (trigger.buttons || []).map(b => {
+    const style = ['Primary','Secondary','Success','Danger'].includes(b.style) ? b.style : 'Primary';
+    return `    new ButtonBuilder()\n      .setCustomId(${j(b.customId || `btn_${b.label}`)})\n      .setLabel(${j(b.label || 'Button')})\n      .setStyle(ButtonStyle.${style})`;
+  }).join(',\n');
+  const cases = (trigger.buttons || []).map(b => {
+    const bActs = b.actions?.length ? b.actions : actions;
+    return `      if (i.customId === ${j(b.customId || `btn_${b.label}`)}) {\n${buildActions(bActs, '        ')}\n      }`;
+  }).join('\n');
+  return `const { ${imp} } = require('discord.js');
 
-const wss = new WebSocket.Server({ server });
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName(${j(name)})
+    .setDescription(${j(desc || 'No description')}),
+  cooldown: ${cool},
 
-wss.on('connection', (ws) => {
-  console.log('WebSocket client connected');
-  
-  ws.send(JSON.stringify({
-    type: 'status',
-    data: { status: botStatus }
-  }));
+  async execute(interaction, _client, _logger) {
+    try {
+${cond ? cond + '\n\n' : ''}      const row = new ActionRowBuilder().addComponents(
+${btnDefs}
+      );
+      await interaction.reply({ content: ${j(trigger.promptMessage || 'Choose an option:')}, components: [row] });
 
-  ws.on('close', () => {
-    console.log('WebSocket client disconnected');
-  });
-});
-
-setInterval(() => {
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'status',
-        data: { status: botStatus }
-      }));
+      const filter = i => i.user.id === interaction.user.id;
+      const col = interaction.channel.createMessageComponentCollector({ filter, time: ${tms} });
+      col.on('collect', async i => {
+        await i.deferUpdate();
+${cases}
+      });
+      col.on('end', (_, reason) => {
+        if (reason === 'time') interaction.editReply({ content: '⏱️ Timed out.', components: [] }).catch(() => {});
+      });
+    } catch (err) {
+      _logger?.error?.(\`/${name} error: \${err.message}\`);
+      if (!interaction.replied && !interaction.deferred)
+        await interaction.reply({ content: '⚠️ Something went wrong.', ephemeral: true }).catch(() => {});
     }
+  },
+};
+`;
+}
+
+function genKeyword(name, desc, trigger, conditions, actions) {
+  const kws  = (trigger.keywords || []).map(k => j(k)).join(', ');
+  const mt   = trigger.matchType || 'includes';
+  const mexpr = mt === 'exact'       ? `[${kws}].some(k => content === k)` :
+                mt === 'startsWith'  ? `[${kws}].some(k => content.startsWith(k))` :
+                                       `[${kws}].some(k => content.includes(k))`;
+  const botG = trigger.ignoreBots !== false ? `    if (message.author?.bot) return;\n` : '';
+  const chG  = trigger.channel ? `    if (message.channel?.name !== ${j(trigger.channel)} && message.channelId !== ${j(trigger.channel)}) return;\n` : '';
+  const imp  = needsEmbed(actions) ? `const { EmbedBuilder } = require('discord.js');\n\n` : '';
+  const acts = actions.map(a => {
+    switch (a.type) {
+      case 'reply_text':   return `    await message.reply({ content: ${j(a.content||'')} });`;
+      case 'reply_embed':  return embedBlock(a,'    ') + `\n    await message.reply({ embeds: [embed] });`;
+      case 'send_to_channel': return `    {\n      const _ch = message.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n      if (_ch?.isTextBased?.()) await _ch.send({ content: ${j(a.content||'')} });\n    }`;
+      case 'send_embed_to_channel': return `    {\n${embedBlock(a,'      ')}\n      const _ch = message.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n      if (_ch?.isTextBased?.()) await _ch.send({ embeds: [embed] });\n    }`;
+      default: return '';
+    }
+  }).filter(Boolean).join('\n\n');
+  return `${imp}module.exports = {
+  name: ${j(name)},
+  description: ${j(desc || 'No description')},
+  type: 'messageCreate',
+  keywords: [${kws}],
+  matchType: ${j(mt)},
+  channel: ${trigger.channel ? j(trigger.channel) : 'null'},
+
+  async execute(message) {
+${botG}${chG}    const content = message.content?.toLowerCase() || '';
+    if (!${mexpr}) return;
+${acts}
+  },
+};
+`;
+}
+
+// ── Server & WebSocket ────────────────────────────────────────────────────────
+const server = app.listen(PORT, async () => {
+  console.log(`\n🚀 Bot Studio  →  http://localhost:${PORT}`);
+  console.log(`🔐 Auth: DASHBOARD_PASSWORD env var`);
+  console.log(`🗄  MongoDB: ${process.env.MONGODB_URI ? 'URI configured' : '⚠️  MONGODB_URI not set!'}`);
+  console.log(`🤖 Discord: ${TOKEN ? 'token set' : '⚠️  DISCORD_TOKEN not set!'}`);
+  console.log(`📡 Guilds: ${GUILD_IDS.length ? GUILD_IDS.join(', ') : '⚠️  GUILD_IDS not set!'}\n`);
+  try { await db.connect(); console.log('[DB] Ready'); }
+  catch (e) { console.error('[DB] Connection failed:', e.message); }
+});
+
+let wss;
+server.on('listening', () => {
+  wss = new WebSocket.Server({ server });
+  wss.on('connection', ws => {
+    ws.send(JSON.stringify({ type: 'status', data: { status: botStatus } }));
   });
-}, 5000);
-
-process.on('SIGTERM', () => {
-  if (botProcess) botProcess.kill('SIGTERM');
-  server.close();
-  process.exit(0);
 });
 
-process.on('SIGINT', () => {
-  if (botProcess) botProcess.kill('SIGTERM');
-  server.close();
-  process.exit(0);
-});
+setInterval(() => broadcast('status', { status: botStatus }), 6000);
+
+process.on('SIGTERM', () => { if (botProcess) botProcess.kill('SIGTERM'); server.close(); process.exit(0); });
+process.on('SIGINT',  () => { if (botProcess) botProcess.kill('SIGTERM'); server.close(); process.exit(0); });
