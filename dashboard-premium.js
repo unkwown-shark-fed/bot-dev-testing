@@ -618,9 +618,263 @@ ${ind}  }).catch(() => {});
 ${ind}}, 10 * 60 * 1000);`;
 }
 
+function buildUtilAction(a, ind) {
+  const jv = v => JSON.stringify(String(v ?? ''));
+  const jb = v => v ? 'true' : 'false';
+  // c() builds a code line: joins args, applies indent
+  const c = (...parts) => ind + parts.join('');
+
+  switch (a.type) {
+
+    case 'purge_messages': {
+      const amount = parseInt(a.amount) || 10;
+      const out = [];
+      out.push(c('// Purge Messages'));
+      if (a.require_admin !== false)
+        out.push(c("if (!interaction.member.permissions.has('ManageMessages')) return interaction.reply({ content: '\u274c You need Manage Messages permission.', ephemeral: true });"));
+      out.push(
+        c('await interaction.deferReply({ ephemeral: true });'),
+        c('try {'),
+        c('  const _msgs = await interaction.channel.messages.fetch({ limit: 100 });'),
+        c('  let toDelete = Array.from(_msgs.values()).slice(0, ', String(amount), ');'),
+      );
+      if (a.filter_user)
+        out.push(c('  toDelete = toDelete.filter(m => m.author.id === ', jv(a.filter_user), ".replace(/[<@!>]/g, ''));"));
+      if (a.filter_bots)
+        out.push(c('  toDelete = toDelete.filter(m => m.author.bot);'));
+      out.push(
+        c('  const _bulk = toDelete.filter(m => m.createdTimestamp > Date.now() - 14 * 24 * 60 * 60 * 1000);'),
+        c('  let _dc = 0;'),
+        c('  if (_bulk.length) { const _d = await interaction.channel.bulkDelete(_bulk, true); _dc += _d.size; }'),
+        c('  await interaction.editReply(`\u2705 Deleted **${_dc}** message(s).`);'),
+        c("} catch (e) { await interaction.editReply('\u274c Error: ' + e.message); }"),
+      );
+      return out.join('\n');
+    }
+
+    case 'kick_member': {
+      const opt = a.target_user || 'user';
+      const reason = a.reason || 'No reason provided';
+      const out = [];
+      out.push(c('// Kick Member'));
+      if (a.require_admin !== false)
+        out.push(c("if (!interaction.member.permissions.has('KickMembers')) return interaction.reply({ content: '\u274c Need Kick Members permission.', ephemeral: true });"));
+      out.push(
+        c('const _kt = interaction.options.getUser(', jv(opt), ');'),
+        c("if (!_kt) return interaction.reply({ content: '\u274c User not found.', ephemeral: true });"),
+        c('try {'),
+        c('  const _km = await interaction.guild.members.fetch(_kt.id);'),
+        c('  await _km.kick(', jv(reason), ');'),
+        c('  await interaction.reply({ content: `\u2705 Kicked **${_kt.tag}**.`, ephemeral: true });'),
+        c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
+      );
+      return out.join('\n');
+    }
+
+    case 'ban_member': {
+      const opt = a.target_user || 'user';
+      const reason = a.reason || 'No reason provided';
+      const days = parseInt(a.delete_days) || 0;
+      const out = [];
+      out.push(c('// Ban Member'));
+      if (a.require_admin !== false)
+        out.push(c("if (!interaction.member.permissions.has('BanMembers')) return interaction.reply({ content: '\u274c Need Ban Members permission.', ephemeral: true });"));
+      out.push(
+        c('const _bt = interaction.options.getUser(', jv(opt), ');'),
+        c("if (!_bt) return interaction.reply({ content: '\u274c User not found.', ephemeral: true });"),
+        c('try {'),
+        c('  await interaction.guild.members.ban(_bt.id, { reason: ', jv(reason), ', deleteMessageDays: ', String(days), ' });'),
+        c('  await interaction.reply({ content: `\u2705 Banned **${_bt.tag}**.`, ephemeral: true });'),
+        c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
+      );
+      return out.join('\n');
+    }
+
+    case 'timeout_member': {
+      const opt = a.target_user || 'user';
+      const dur = parseInt(a.duration) || 10;
+      const reason = a.reason || 'No reason provided';
+      const out = [];
+      out.push(c('// Timeout Member'));
+      if (a.require_admin !== false)
+        out.push(c("if (!interaction.member.permissions.has('ModerateMembers')) return interaction.reply({ content: '\u274c Need Moderate Members permission.', ephemeral: true });"));
+      out.push(
+        c('const _tot = interaction.options.getUser(', jv(opt), ');'),
+        c("if (!_tot) return interaction.reply({ content: '\u274c User not found.', ephemeral: true });"),
+        c('try {'),
+        c('  const _tom = await interaction.guild.members.fetch(_tot.id);'),
+        c('  await _tom.timeout(', String(dur), ' * 60 * 1000, ', jv(reason), ');'),
+        c('  await interaction.reply({ content: `\u2705 Timed out **${_tot.tag}** for ', String(dur), ' minute(s).`, ephemeral: true });'),
+        c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
+      );
+      return out.join('\n');
+    }
+
+    case 'add_role': {
+      const opt = a.target_user || 'user';
+      const role = a.role_id || '';
+      const out = [
+        c('// Add Role'),
+        c("if (!interaction.member.permissions.has('ManageRoles')) return interaction.reply({ content: '\u274c Need Manage Roles permission.', ephemeral: true });"),
+        c('const _art = interaction.options.getUser(', jv(opt), ');'),
+        c("if (!_art) return interaction.reply({ content: '\u274c User not found.', ephemeral: true });"),
+        c('try {'),
+        c('  const _arm = await interaction.guild.members.fetch(_art.id);'),
+        c('  const _arr = interaction.guild.roles.cache.find(r => r.name === ', jv(role), ' || r.id === ', jv(role), ');'),
+        c("  if (!_arr) return interaction.reply({ content: '\u274c Role not found.', ephemeral: true });"),
+        c('  await _arm.roles.add(_arr);'),
+        c('  await interaction.reply({ content: `\u2705 Added **${_arr.name}** to **${_art.tag}**.`, ephemeral: true });'),
+        c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
+      ];
+      return out.join('\n');
+    }
+
+    case 'remove_role': {
+      const opt = a.target_user || 'user';
+      const role = a.role_id || '';
+      const out = [
+        c('// Remove Role'),
+        c("if (!interaction.member.permissions.has('ManageRoles')) return interaction.reply({ content: '\u274c Need Manage Roles permission.', ephemeral: true });"),
+        c('const _rrt = interaction.options.getUser(', jv(opt), ');'),
+        c("if (!_rrt) return interaction.reply({ content: '\u274c User not found.', ephemeral: true });"),
+        c('try {'),
+        c('  const _rrm = await interaction.guild.members.fetch(_rrt.id);'),
+        c('  const _rrr = interaction.guild.roles.cache.find(r => r.name === ', jv(role), ' || r.id === ', jv(role), ');'),
+        c("  if (!_rrr) return interaction.reply({ content: '\u274c Role not found.', ephemeral: true });"),
+        c('  await _rrm.roles.remove(_rrr);'),
+        c('  await interaction.reply({ content: `\u2705 Removed **${_rrr.name}** from **${_rrt.tag}**.`, ephemeral: true });'),
+        c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
+      ];
+      return out.join('\n');
+    }
+
+    case 'user_info': {
+      const opt = a.target_user || 'user';
+      const eph = jb(a.ephemeral);
+      const out = [
+        c('// User Info'),
+        c("const { EmbedBuilder: _UIE } = require('discord.js');"),
+        c('const _uiu = interaction.options.getUser(', jv(opt), ') || interaction.user;'),
+        c('const _uim = interaction.guild ? await interaction.guild.members.fetch(_uiu.id).catch(() => null) : null;'),
+        c('const _uie = new _UIE()'),
+        c('  .setTitle(`\ud83d\udc64 ${_uiu.tag}`)'),
+        c('  .setThumbnail(_uiu.displayAvatarURL({ size: 256 }))'),
+        c("  .setColor(_uim?.displayHexColor || '#5865F2')"),
+        c('  .setTimestamp()'),
+        c('  .addFields('),
+        c("    { name: '\ud83c\udd94 ID', value: `\\`${_uiu.id}\\``, inline: true },"),
+        c("    { name: '\ud83d\udcc5 Created', value: `<t:${Math.floor(_uiu.createdTimestamp / 1000)}:F>`, inline: false }"),
+        c('  );'),
+        c('if (_uim) {'),
+        c("  _uie.addFields({ name: '\ud83d\udce5 Joined', value: `<t:${Math.floor(_uim.joinedTimestamp / 1000)}:F>`, inline: false });"),
+        c('  const _uir = _uim.roles.cache.filter(r => r.id !== interaction.guild.id).map(r => r.toString()).slice(0, 8);'),
+        c("  if (_uir.length) _uie.addFields({ name: `🎭 Roles [${_uim.roles.cache.size - 1}]`, value: _uir.join(', '), inline: false });"),
+        c('}'),
+        c('await interaction.reply({ embeds: [_uie], ephemeral: ', eph, ' });'),
+      ];
+      return out.join('\n');
+    }
+
+    case 'server_info': {
+      const eph = jb(a.ephemeral);
+      const out = [
+        c('// Server Info'),
+        c("const { EmbedBuilder: _SIE } = require('discord.js');"),
+        c('const _sig = interaction.guild;'),
+        c('await _sig.fetch();'),
+        c('const _sie = new _SIE()'),
+        c('  .setTitle(`\ud83d\udda5\ufe0f ${_sig.name}`)'),
+        c('  .setThumbnail(_sig.iconURL({ size: 256 }) || null)'),
+        c("  .setColor('#5865F2')"),
+        c('  .setTimestamp()'),
+        c('  .addFields('),
+        c("    { name: '\ud83c\udd94 Server ID', value: `\\`${_sig.id}\\``, inline: true },"),
+        c("    { name: '\ud83d\udc51 Owner', value: `<@${_sig.ownerId}>`, inline: true },"),
+        c("    { name: '\ud83d\udc65 Members', value: String(_sig.memberCount), inline: true },"),
+        c("    { name: '\ud83d\udcac Channels', value: String(_sig.channels.cache.size), inline: true },"),
+        c("    { name: '🎭 Roles', value: String(_sig.roles.cache.size), inline: true },"),
+        c("    { name: '\ud83d\ude00 Emojis', value: String(_sig.emojis.cache.size), inline: true }"),
+        c('  );'),
+        c('await interaction.reply({ embeds: [_sie], ephemeral: ', eph, ' });'),
+      ];
+      return out.join('\n');
+    }
+
+    case 'list_role_members': {
+      const role = a.role_id || '';
+      const eph = jb(a.ephemeral);
+      const out = [
+        c('// List Role Members'),
+        c("const { EmbedBuilder: _LRE } = require('discord.js');"),
+        c('await interaction.deferReply({ ephemeral: ', eph, ' });'),
+        c('const _lrr = interaction.guild.roles.cache.find(r => r.name === ', jv(role), ' || r.id === ', jv(role), ');'),
+        c("if (!_lrr) return interaction.editReply('\u274c Role not found.');"),
+        c('await interaction.guild.members.fetch();'),
+        c('const _lrm = _lrr.members.map(m => `${m.user.tag} (\\`${m.id}\\`)`);'),
+        c("if (!_lrm.length) return interaction.editReply(`\u274c No members in **${_lrr.name}**.`);"),
+        c('const _lrc = [];'),
+        c('for (let _li = 0; _li < _lrm.length; _li += 20) _lrc.push(_lrm.slice(_li, _li + 20));'),
+        c("await interaction.editReply({ embeds: [new _LRE().setTitle(`\ud83d\udccb ${_lrr.name} \u2014 ${_lrm.length} member(s)`).setDescription(_lrc[0].join('\\n')).setColor(_lrr.hexColor || '#5865F2')] });"),
+        c('for (let _li = 1; _li < Math.min(_lrc.length, 4); _li++)'),
+        c("  await interaction.followUp({ embeds: [new _LRE().setDescription(_lrc[_li].join('\\n')).setColor(_lrr.hexColor || '#5865F2')], ephemeral: ", eph, ' });'),
+      ];
+      return out.join('\n');
+    }
+
+    case 'dm_user': {
+      const opt = a.target_user || 'user';
+      const msg = a.content || 'Hello!';
+      const out = [
+        c('// DM User'),
+        c('const _dmt = interaction.options.getUser(', jv(opt), ');'),
+        c("if (!_dmt) return interaction.reply({ content: '\u274c User not found.', ephemeral: true });"),
+        c('try {'),
+        c('  await _dmt.send(', jv(msg), ');'),
+        c('  await interaction.reply({ content: `\u2705 DM sent to **${_dmt.tag}**.`, ephemeral: true });'),
+        c("} catch (e) { await interaction.reply({ content: '\u274c Could not DM (DMs may be disabled).', ephemeral: true }); }"),
+      ];
+      return out.join('\n');
+    }
+
+    case 'repost_messages': {
+      const src = a.source_channel || '';
+      const tgt = a.target_channel || '';
+      const lim = parseInt(a.limit) || 20;
+      const inclLink = jb(a.include_link !== false);
+      const out = [
+        c('// Repost Messages'),
+        c('await interaction.deferReply({ ephemeral: true });'),
+        c('const _rps = interaction.guild.channels.cache.find(c => c.name === ', jv(src), ' || c.id === ', jv(src), ');'),
+        c('const _rpt = interaction.guild.channels.cache.find(c => c.name === ', jv(tgt), ' || c.id === ', jv(tgt), ');'),
+        c("if (!_rps) return interaction.editReply('\u274c Source channel not found.');"),
+        c("if (!_rpt) return interaction.editReply('\u274c Target channel not found.');"),
+        c('const _rpm = await _rps.messages.fetch({ limit: ', String(lim), ' });'),
+        c('const _rpa = Array.from(_rpm.values()).reverse();'),
+        c('let _rpc = 0;'),
+        c('for (const _m of _rpa) {'),
+        c("  let _t = `**${_m.author.tag}** \u2014 ${new Date(_m.createdTimestamp).toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`;"),
+        c('  if (_m.content) _t += `\\n${_m.content}`;'),
+        c("  if (_m.attachments.size) _t += '\\n' + Array.from(_m.attachments.values()).map(att => `\ud83d\udcce [${att.name}](${att.url})`).join('\\n');"),
+        c('  if (', inclLink, ') _t += `\\nOriginal: <#${_m.channelId}> \ud83c\udf0a`;'),
+        c('  try { await _rpt.send(_t); _rpc++; } catch (_) {}'),
+        c('  await new Promise(r => setTimeout(r, 700));'),
+        c('}'),
+        c('await interaction.editReply(`\u2705 Reposted ${_rpc}/${_rpa.length} messages to <#${_rpt.id}>.`);'),
+      ];
+      return out.join('\n');
+    }
+
+    default: return '';
+  }
+}
+
+
 function buildActions(actions, ind = '    ') {
   return actions.map(a => {
     if (a.type === 'modal_form') return buildModalFormAction(a, ind);
+    // Utility actions
+    const utilTypes = ['purge_messages','kick_member','ban_member','timeout_member','add_role','remove_role','user_info','server_info','list_role_members','dm_user','repost_messages'];
+    if (utilTypes.includes(a.type)) return buildUtilAction(a, ind);
     const eph = a.ephemeral ? ', ephemeral: true' : '';
     switch (a.type) {
       case 'reply_text':   return `${ind}await interaction.reply({ content: ${j(a.content || '')}${eph} });`;

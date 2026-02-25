@@ -725,10 +725,14 @@ input[type=color] { cursor: pointer; }
         <div class="cpanel-right mob-hidden" id="bp-code">
           <div class="cpr-hd">
             <h4>Generated Code</h4>
-            <button class="sbtn" onclick="copyCode()">📋 Copy</button>
+            <div style="display:flex;gap:6px">
+              <button class="sbtn" onclick="resetCode()" id="reset-btn" title="Reset to last generated code" style="display:none">↩ Reset</button>
+              <button class="sbtn" onclick="copyCode()">📋 Copy</button>
+            </div>
           </div>
-          <textarea class="code-ta" id="code-out" readonly
-            placeholder="// Click ⚡ Generate Code to preview&#10;// Then 🚀 Save &amp; Deploy to Discord"></textarea>
+          <textarea class="code-ta" id="code-out"
+            placeholder="// Click ⚡ Generate Code to preview&#10;// Then 🚀 Save &amp; Deploy to Discord"
+            oninput="onCodeEdit()"></textarea>
           <div class="deploy-bar">
             <div class="dname-row">
               <input class="finput" id="dname" placeholder="command-name">
@@ -1499,12 +1503,70 @@ const actLbl = {
   reply_text:'💬 Reply Text', reply_embed:'🎨 Reply Embed',
   followup_text:'➕ Follow-up Text', followup_embed:'➕ Follow-up Embed',
   send_to_channel:'📤 Text to Channel', send_embed_to_channel:'📤 Embed to Channel',
-  modal_form:'📝 Modal Form', quote_messages:'💬 Quote Messages'
+  modal_form:'📝 Modal Form', quote_messages:'💬 Quote Messages',
+  purge_messages:'🧹 Purge Messages', kick_member:'👢 Kick Member',
+  ban_member:'🔨 Ban Member', timeout_member:'⏰ Timeout Member',
+  add_role:'🏷️ Add Role', remove_role:'🏷️ Remove Role',
+  user_info:'👤 User Info', server_info:'🖥️ Server Info',
+  list_role_members:'📋 List Role Members',
+  dm_user:'📩 DM User', repost_messages:'🔁 Repost Messages'
 };
 function renderActs() {
   document.getElementById('act-list').innerHTML = acts.map(a => {
     if (a.type === 'modal_form') return renderModalAct(a);
     if (a.type === 'quote_messages') return renderQuoteAct(a);
+    if (a.type === 'purge_messages') return renderUtilAct(a, [
+      { key:'amount', label:'Messages to delete', type:'number', placeholder:'10', min:1, max:100 },
+      { key:'filter_user', label:'Only from user (ID or mention)', type:'text', placeholder:'optional' },
+      { key:'filter_bots', label:'Bots only', type:'checkbox' },
+      { key:'require_admin', label:'Require Admin permission', type:'checkbox', default:true },
+    ]);
+    if (a.type === 'kick_member') return renderUtilAct(a, [
+      { key:'target_user', label:'User option name', type:'text', placeholder:'user' },
+      { key:'reason', label:'Reason', type:'text', placeholder:'optional' },
+      { key:'require_admin', label:'Require Admin permission', type:'checkbox', default:true },
+    ]);
+    if (a.type === 'ban_member') return renderUtilAct(a, [
+      { key:'target_user', label:'User option name', type:'text', placeholder:'user' },
+      { key:'reason', label:'Reason', type:'text', placeholder:'optional' },
+      { key:'delete_days', label:'Delete message history (days 0-7)', type:'number', placeholder:'0', min:0, max:7 },
+      { key:'require_admin', label:'Require Admin permission', type:'checkbox', default:true },
+    ]);
+    if (a.type === 'timeout_member') return renderUtilAct(a, [
+      { key:'target_user', label:'User option name', type:'text', placeholder:'user' },
+      { key:'duration', label:'Duration (minutes)', type:'number', placeholder:'10', min:1, max:40320 },
+      { key:'reason', label:'Reason', type:'text', placeholder:'optional' },
+      { key:'require_admin', label:'Require Admin permission', type:'checkbox', default:true },
+    ]);
+    if (a.type === 'add_role') return renderUtilAct(a, [
+      { key:'target_user', label:'User option name', type:'text', placeholder:'user' },
+      { key:'role_id', label:'Role name or ID', type:'text', placeholder:'Member' },
+    ]);
+    if (a.type === 'remove_role') return renderUtilAct(a, [
+      { key:'target_user', label:'User option name', type:'text', placeholder:'user' },
+      { key:'role_id', label:'Role name or ID', type:'text', placeholder:'Member' },
+    ]);
+    if (a.type === 'user_info') return renderUtilAct(a, [
+      { key:'target_user', label:'User option name', type:'text', placeholder:'user' },
+      { key:'ephemeral', label:'Ephemeral', type:'checkbox' },
+    ]);
+    if (a.type === 'server_info') return renderUtilAct(a, [
+      { key:'ephemeral', label:'Ephemeral', type:'checkbox' },
+    ]);
+    if (a.type === 'list_role_members') return renderUtilAct(a, [
+      { key:'role_id', label:'Role name or ID', type:'text', placeholder:'Member' },
+      { key:'ephemeral', label:'Ephemeral', type:'checkbox' },
+    ]);
+    if (a.type === 'dm_user') return renderUtilAct(a, [
+      { key:'target_user', label:'User option name', type:'text', placeholder:'user' },
+      { key:'content', label:'Message to DM', type:'textarea', placeholder:'Hello!' },
+    ]);
+    if (a.type === 'repost_messages') return renderUtilAct(a, [
+      { key:'source_channel', label:'Source channel (name or ID)', type:'text', placeholder:'submissions' },
+      { key:'target_channel', label:'Target channel (name or ID)', type:'text', placeholder:'highlights' },
+      { key:'limit', label:'Max messages', type:'number', placeholder:'20', min:1, max:200 },
+      { key:'include_link', label:'Include original link', type:'checkbox', default:true },
+    ]);
     const isE  = a.type.includes('embed');
     const isCh = a.type.includes('to_channel');
     return `
@@ -1603,6 +1665,14 @@ function renderQuoteAct(a) {
       <label>Show message timestamp</label>
     </label>
     <label class="crow">
+      <input type="checkbox" ${a.showAttachments!==false?'checked':''} onchange="updAct(${a.id},'showAttachments',this.checked)">
+      <label>Show attachments</label>
+    </label>
+    <label class="crow">
+      <input type="checkbox" ${a.showOriginalLink!==false?'checked':''} onchange="updAct(${a.id},'showOriginalLink',this.checked)">
+      <label>Show original channel link</label>
+    </label>
+    <label class="crow">
       <input type="checkbox" ${a.ephemeral?'checked':''} onchange="updAct(${a.id},'ephemeral',this.checked)">
       <label>Ephemeral (only sender sees)</label>
     </label>
@@ -1629,7 +1699,7 @@ function loadQuotePreset() {
   renderConds();
 
   // Set action
-  acts = [{ id: Date.now()+1, type:'quote_messages', optionName:'links', maxQuotes:5, showTimestamp:true, ephemeral:false }];
+  acts = [{ id: Date.now()+1, type:'quote_messages', optionName:'links', maxQuotes:5, showTimestamp:true, showAttachments:true, showOriginalLink:true, ephemeral:false }];
   renderActs();
 
   preview();
@@ -1639,67 +1709,322 @@ function loadQuotePreset() {
 // ── QUOTE CODE GEN ────────────────────────────────────────────────────────────
 function genQuoteCode(flow) {
   const a = flow.actions.find(x => x.type === 'quote_messages') || {};
-  const optName   = a.optionName || 'links';
-  const maxQ      = a.maxQuotes  || 5;
-  const showTs    = a.showTimestamp !== false;
-  const ephemeral = a.ephemeral ? 'true' : 'false';
-  const cmdName   = flow.commandName || 'quote';
-  const cmdDesc   = flow.commandDesc || 'Quote messages by link';
+  const optName      = a.optionName || 'links';
+  const maxQ         = a.maxQuotes  || 5;
+  const showAtt      = a.showAttachments !== false;
+  const showOrigLink = a.showOriginalLink !== false;
+  const eph          = a.ephemeral ? 'true' : 'false';
+  const cmdName      = flow.commandName || 'quote';
+  const cmdDesc      = flow.commandDesc || 'Quote messages by link';
 
-  return `// /${cmdName} — generated by Bot Studio
-const { SlashCommandBuilder } = require('discord.js');
+  const attCode = showAtt
+    ? "\n        if (msg.attachments && msg.attachments.size > 0) {\n          out += '\\\\n';\n          for (const att of msg.attachments.values()) {\n            out += `\\\\nAttachments: \u{1F4CE} [${att.name || 'file'}](${att.url})`;\n          }\n        }"
+    : '';
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('${cmdName}')
-    .setDescription('${cmdDesc}')
-    .addStringOption(opt =>
-      opt.setName('${optName}')
-         .setDescription('Paste message links separated by spaces (max ${maxQ})')
-         .setRequired(true)
-    ),
+  const origCode = showOrigLink
+    ? "\n        out += `\\\\n\\\\nOriginal: <#${msg.channelId}> \u{1F30A}`;"
+    : '';
 
-  async execute(interaction) {
-    await interaction.deferReply({ ephemeral: ${ephemeral} });
+  return (
+    "// /" + cmdName + " \u2014 generated by Bot Studio\n" +
+    "const { SlashCommandBuilder } = require('discord.js');\n\n" +
+    "module.exports = {\n" +
+    "  data: new SlashCommandBuilder()\n" +
+    "    .setName('" + cmdName + "')\n" +
+    "    .setDescription('" + cmdDesc + "')\n" +
+    "    .addStringOption(opt =>\n" +
+    "      opt.setName('" + optName + "')\n" +
+    "         .setDescription('Paste message links separated by spaces (max " + maxQ + ")')\n" +
+    "         .setRequired(true)\n" +
+    "    ),\n\n" +
+    "  async execute(interaction) {\n" +
+    "    await interaction.deferReply({ ephemeral: " + eph + " });\n\n" +
+    "    const raw    = interaction.options.getString('" + optName + "');\n" +
+    "    const linkRe = /https?:\\/\\/(?:ptb\\.|canary\\.)?discord(?:app)?\\.com\\/channels\\/(\\d+)\\/(\\d+)\\/(\\d+)/g;\n" +
+    "    const links  = (raw.match(linkRe) || []).slice(0, " + maxQ + ");\n\n" +
+    "    if (!links.length) {\n" +
+    "      return interaction.editReply('\u274C No valid Discord message links found.');\n" +
+    "    }\n\n" +
+    "    const parseLink = url => {\n" +
+    "      const m = url.match(/channels\\/(\\d+)\\/(\\d+)\\/(\\d+)/);\n" +
+    "      return m ? { channelId: m[2], messageId: m[3] } : null;\n" +
+    "    };\n\n" +
+    "    let first = true;\n\n" +
+    "    for (const link of links) {\n" +
+    "      const parsed = parseLink(link);\n" +
+    "      if (!parsed) {\n" +
+    "        const err = `\u274C Invalid link: ${link}`;\n" +
+    "        if (first) { await interaction.editReply(err); first = false; }\n" +
+    "        else await interaction.followUp({ content: err, ephemeral: " + eph + " });\n" +
+    "        continue;\n" +
+    "      }\n\n" +
+    "      try {\n" +
+    "        const channel = await interaction.client.channels.fetch(parsed.channelId);\n" +
+    "        if (!channel || !channel.isTextBased()) throw new Error('Channel not accessible');\n" +
+    "        const msg = await channel.messages.fetch(parsed.messageId);\n\n" +
+    "        const tag     = `${msg.author.username}#${msg.author.discriminator}`;\n" +
+    "        const dateStr = new Date(msg.createdTimestamp).toLocaleString('en-US', {\n" +
+    "          month: 'numeric', day: 'numeric', year: 'numeric',\n" +
+    "          hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true\n" +
+    "        });\n\n" +
+    "        let out = `**${tag}** \u2014 ${dateStr}`;\n" +
+    "        if (msg.content) out += `\\n${msg.content}`;\n" +
+    attCode +
+    origCode +
+    "\n\n" +
+    "        if (first) { await interaction.editReply(out); first = false; }\n" +
+    "        else await interaction.followUp({ content: out, ephemeral: " + eph + " });\n\n" +
+    "      } catch (err) {\n" +
+    "        const errMsg = `\u274C Could not fetch message: ${link}`;\n" +
+    "        if (first) { await interaction.editReply(errMsg); first = false; }\n" +
+    "        else await interaction.followUp({ content: errMsg, ephemeral: " + eph + " });\n" +
+    "      }\n" +
+    "    }\n" +
+    "  },\n" +
+    "};\n"
+  );
+}
 
-    const raw   = interaction.options.getString('${optName}');
-    const links = raw.trim().split(/\\s+/).slice(0, ${maxQ});
+// ── UTILITY ACTION RENDERER ─────────────────────────────────────────────────
+function renderUtilAct(a, fields) {
+  const color = {
+    purge_messages:'#e74c3c', kick_member:'#e67e22', ban_member:'#c0392b',
+    timeout_member:'#f39c12', add_role:'#27ae60', remove_role:'#e74c3c',
+    user_info:'#5865F2', server_info:'#5865F2', list_role_members:'#5865F2',
+    dm_user:'#2ecc71', repost_messages:'#3498db'
+  }[a.type] || 'var(--acc)';
 
-    // Regex to parse Discord message links
-    const linkRe = /https:\\/\\/(?:ptb\\.|canary\\.)?discord(?:app)?\\.com\\/channels\\/(\\d+)\\/(\\d+)\\/(\\d+)/;
+  const rows = fields.map(f => {
+    const val = a[f.key] !== undefined ? a[f.key] : (f.default !== undefined ? f.default : '');
+    if (f.type === 'checkbox') {
+      return `<label class="crow"><input type="checkbox" ${val?'checked':''} onchange="updAct(${a.id},'${f.key}',this.checked)"><label>${f.label}</label></label>`;
+    }
+    if (f.type === 'textarea') {
+      return `<div class="frow"><div class="flabel">${f.label}</div><textarea class="ftextarea" placeholder="${f.placeholder||''}" oninput="updAct(${a.id},'${f.key}',this.value)">${esc(val)}</textarea></div>`;
+    }
+    if (f.type === 'number') {
+      return `<div class="frow"><div class="flabel">${f.label}</div><input class="finput" type="number" min="${f.min||1}" max="${f.max||999}" value="${val||f.placeholder||''}" placeholder="${f.placeholder||''}" oninput="updAct(${a.id},'${f.key}',parseInt(this.value)||${f.min||1})"></div>`;
+    }
+    return `<div class="frow"><div class="flabel">${f.label}</div><input class="finput" value="${esc(val)}" placeholder="${f.placeholder||''}" oninput="updAct(${a.id},'${f.key}',this.value)"></div>`;
+  }).join('');
 
-    const lines = [];
+  return `
+  <div class="mcard mcard-act" style="border-left-color:${color}">
+    <div class="mcard-hd">
+      <span class="mtitle">${actLbl[a.type]||a.type}</span>
+      <button class="xbtn" onclick="removeAct(${a.id})">×</button>
+    </div>
+    ${rows}
+  </div>`;
+}
 
-    for (const link of links) {
-      const m = link.match(linkRe);
-      if (!m) { lines.push(\`⚠️ Invalid link: \${link}\`); continue; }
+// ── UTILITY CODE GENERATORS ──────────────────────────────────────────────────
+function genUtilActionCode(a, ind) {
+  const i = ind || '    ';
+  const j = v => JSON.stringify(String(v ?? ''));
+  const jb = v => v ? 'true' : 'false';
 
-      const [, guildId, channelId, messageId] = m;
+  switch (a.type) {
 
-      try {
-        const channel = await interaction.client.channels.fetch(channelId);
-        if (!channel || !channel.isTextBased()) {
-          lines.push(\`⚠️ Can't access channel for: \${link}\`);
-          continue;
-        }
-
-        const msg = await channel.messages.fetch(messageId);
-
-        const author    = \`**\${msg.author.tag}**\`;
-        const content   = msg.content || '*(no text content)*';${showTs ? `
-        const ts        = \`<t:\${Math.floor(msg.createdTimestamp / 1000)}:f>\`;
-        lines.push(\`> 💬 \${author} · \${ts}\\n> \${content}\\n> 🔗 \${link}\`);` : `
-        lines.push(\`> 💬 \${author}\\n> \${content}\\n> 🔗 \${link}\`);`}
-      } catch (err) {
-        lines.push(\`❌ Could not fetch message: \${link}\`);
-      }
+    case 'purge_messages': {
+      const amount = parseInt(a.amount) || 10;
+      const filterUser = a.filter_user ? `\n${i}    const filterUserId = ${j(a.filter_user)}.replace(/[<@!>]/g,'');` : '';
+      const filterBotsCheck = a.filter_bots ? `\n${i}    toDelete = toDelete.filter(m => m.author.bot);` : '';
+      const filterUserCheck = a.filter_user ? `\n${i}    if (filterUserId) toDelete = toDelete.filter(m => m.author.id === filterUserId);` : '';
+      const permCheck = a.require_admin !== false ? `\n${i}if (!interaction.member.permissions.has('ManageMessages')) return interaction.reply({ content: '❌ You need Manage Messages permission.', ephemeral: true });` : '';
+      return `${i}// ── Purge Messages ──${permCheck}
+${i}await interaction.deferReply({ ephemeral: true });
+${i}try {
+${i}  const _msgs = await interaction.channel.messages.fetch({ limit: 100 });${filterUser}
+${i}  let toDelete = Array.from(_msgs.values()).slice(0, ${amount});${filterBotsCheck}${filterUserCheck}
+${i}  const _twoWeeks = Date.now() - 14 * 24 * 60 * 60 * 1000;
+${i}  const _bulk = toDelete.filter(m => m.createdTimestamp > _twoWeeks);
+${i}  let _delCount = 0;
+${i}  if (_bulk.length) { const _d = await interaction.channel.bulkDelete(_bulk, true); _delCount += _d.size; }
+${i}  await interaction.editReply(\`✅ Deleted **\${_delCount}** message(s).\`);
+${i}} catch(e) { await interaction.editReply('❌ Error: ' + e.message); }`;
     }
 
-    const reply = lines.join('\\n\\n');
-    await interaction.editReply(reply.length ? reply : '❌ No valid messages found.');
-  },
-};
-`;
+    case 'kick_member': {
+      const userOpt = a.target_user || 'user';
+      const reason = a.reason || 'No reason provided';
+      const permCheck = a.require_admin !== false ? `\n${i}if (!interaction.member.permissions.has('KickMembers')) return interaction.reply({ content: '❌ You need Kick Members permission.', ephemeral: true });` : '';
+      return `${i}// ── Kick Member ──${permCheck}
+${i}const _kickTarget = interaction.options.getUser(${j(userOpt)});
+${i}if (!_kickTarget) return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+${i}try {
+${i}  const _kickMember = await interaction.guild.members.fetch(_kickTarget.id);
+${i}  await _kickMember.kick(${j(reason)});
+${i}  await interaction.reply({ content: \`✅ Kicked **\${_kickTarget.tag}**. Reason: ${reason}\`, ephemeral: true });
+${i}} catch(e) { await interaction.reply({ content: '❌ Could not kick: ' + e.message, ephemeral: true }); }`;
+    }
+
+    case 'ban_member': {
+      const userOpt = a.target_user || 'user';
+      const reason = a.reason || 'No reason provided';
+      const days = parseInt(a.delete_days) || 0;
+      const permCheck = a.require_admin !== false ? `\n${i}if (!interaction.member.permissions.has('BanMembers')) return interaction.reply({ content: '❌ You need Ban Members permission.', ephemeral: true });` : '';
+      return `${i}// ── Ban Member ──${permCheck}
+${i}const _banTarget = interaction.options.getUser(${j(userOpt)});
+${i}if (!_banTarget) return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+${i}try {
+${i}  await interaction.guild.members.ban(_banTarget.id, { reason: ${j(reason)}, deleteMessageDays: ${days} });
+${i}  await interaction.reply({ content: \`✅ Banned **\${_banTarget.tag}**. Reason: ${reason}\`, ephemeral: true });
+${i}} catch(e) { await interaction.reply({ content: '❌ Could not ban: ' + e.message, ephemeral: true }); }`;
+    }
+
+    case 'timeout_member': {
+      const userOpt = a.target_user || 'user';
+      const duration = parseInt(a.duration) || 10;
+      const reason = a.reason || 'No reason provided';
+      const permCheck = a.require_admin !== false ? `\n${i}if (!interaction.member.permissions.has('ModerateMembers')) return interaction.reply({ content: '❌ You need Moderate Members permission.', ephemeral: true });` : '';
+      return `${i}// ── Timeout Member ──${permCheck}
+${i}const _toTarget = interaction.options.getUser(${j(userOpt)});
+${i}if (!_toTarget) return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+${i}try {
+${i}  const _toMember = await interaction.guild.members.fetch(_toTarget.id);
+${i}  await _toMember.timeout(${duration} * 60 * 1000, ${j(reason)});
+${i}  await interaction.reply({ content: \`✅ Timed out **\${_toTarget.tag}** for ${duration} minute(s). Reason: ${reason}\`, ephemeral: true });
+${i}} catch(e) { await interaction.reply({ content: '❌ Could not timeout: ' + e.message, ephemeral: true }); }`;
+    }
+
+    case 'add_role': {
+      const userOpt = a.target_user || 'user';
+      const roleId = a.role_id || '';
+      return `${i}// ── Add Role ──
+${i}if (!interaction.member.permissions.has('ManageRoles')) return interaction.reply({ content: '❌ You need Manage Roles permission.', ephemeral: true });
+${i}const _arTarget = interaction.options.getUser(${j(userOpt)});
+${i}if (!_arTarget) return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+${i}try {
+${i}  const _arMember = await interaction.guild.members.fetch(_arTarget.id);
+${i}  const _arRole = interaction.guild.roles.cache.find(r => r.name === ${j(roleId)} || r.id === ${j(roleId)});
+${i}  if (!_arRole) return interaction.reply({ content: \`❌ Role "${roleId}" not found.\`, ephemeral: true });
+${i}  await _arMember.roles.add(_arRole);
+${i}  await interaction.reply({ content: \`✅ Added **\${_arRole.name}** to **\${_arTarget.tag}**.\`, ephemeral: true });
+${i}} catch(e) { await interaction.reply({ content: '❌ Error: ' + e.message, ephemeral: true }); }`;
+    }
+
+    case 'remove_role': {
+      const userOpt = a.target_user || 'user';
+      const roleId = a.role_id || '';
+      return `${i}// ── Remove Role ──
+${i}if (!interaction.member.permissions.has('ManageRoles')) return interaction.reply({ content: '❌ You need Manage Roles permission.', ephemeral: true });
+${i}const _rrTarget = interaction.options.getUser(${j(userOpt)});
+${i}if (!_rrTarget) return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+${i}try {
+${i}  const _rrMember = await interaction.guild.members.fetch(_rrTarget.id);
+${i}  const _rrRole = interaction.guild.roles.cache.find(r => r.name === ${j(roleId)} || r.id === ${j(roleId)});
+${i}  if (!_rrRole) return interaction.reply({ content: \`❌ Role "${roleId}" not found.\`, ephemeral: true });
+${i}  await _rrMember.roles.remove(_rrRole);
+${i}  await interaction.reply({ content: \`✅ Removed **\${_rrRole.name}** from **\${_rrTarget.tag}**.\`, ephemeral: true });
+${i}} catch(e) { await interaction.reply({ content: '❌ Error: ' + e.message, ephemeral: true }); }`;
+    }
+
+    case 'user_info': {
+      const userOpt = a.target_user || 'user';
+      const eph = jb(a.ephemeral);
+      return `${i}// ── User Info ──
+${i}const { EmbedBuilder: _UIEmbed } = require('discord.js');
+${i}const _uiUser = interaction.options.getUser(${j(userOpt)}) || interaction.user;
+${i}const _uiMember = interaction.guild ? await interaction.guild.members.fetch(_uiUser.id).catch(()=>null) : null;
+${i}const _uiEmbed = new _UIEmbed()
+${i}  .setTitle(\`👤 \${_uiUser.tag}\`)
+${i}  .setThumbnail(_uiUser.displayAvatarURL({ size: 256 }))
+${i}  .setColor(_uiMember?.displayHexColor || '#5865F2')
+${i}  .setTimestamp()
+${i}  .addFields(
+${i}    { name: '🆔 User ID', value: \`\\\`\${_uiUser.id}\\\`\`, inline: true },
+${i}    { name: '🤖 Bot', value: _uiUser.bot ? 'Yes' : 'No', inline: true },
+${i}    { name: '📅 Created', value: \`<t:\${Math.floor(_uiUser.createdTimestamp/1000)}:F>\`, inline: false }
+${i}  );
+${i}if (_uiMember) {
+${i}  _uiEmbed.addFields({ name: '📥 Joined', value: \`<t:\${Math.floor(_uiMember.joinedTimestamp/1000)}:F>\`, inline: false });
+${i}  const _uiRoles = _uiMember.roles.cache.filter(r=>r.id!==interaction.guild.id).map(r=>r.toString()).slice(0,8);
+${i}  if (_uiRoles.length) _uiEmbed.addFields({ name: \`🎭 Roles [\${_uiMember.roles.cache.size-1}]\`, value: _uiRoles.join(', '), inline: false });
+${i}}
+${i}await interaction.reply({ embeds: [_uiEmbed], ephemeral: ${eph} });`;
+    }
+
+    case 'server_info': {
+      const eph = jb(a.ephemeral);
+      return `${i}// ── Server Info ──
+${i}const { EmbedBuilder: _SIEmbed } = require('discord.js');
+${i}const _siGuild = interaction.guild;
+${i}await _siGuild.fetch();
+${i}const _siEmbed = new _SIEmbed()
+${i}  .setTitle(\`🖥️ \${_siGuild.name}\`)
+${i}  .setThumbnail(_siGuild.iconURL({ size: 256 }))
+${i}  .setColor('#5865F2')
+${i}  .setTimestamp()
+${i}  .addFields(
+${i}    { name: '🆔 Server ID', value: \`\\\`\${_siGuild.id}\\\`\`, inline: true },
+${i}    { name: '👑 Owner', value: \`<@\${_siGuild.ownerId}>\`, inline: true },
+${i}    { name: '👥 Members', value: String(_siGuild.memberCount), inline: true },
+${i}    { name: '📅 Created', value: \`<t:\${Math.floor(_siGuild.createdTimestamp/1000)}:F>\`, inline: false },
+${i}    { name: '💬 Channels', value: String(_siGuild.channels.cache.size), inline: true },
+${i}    { name: '🎭 Roles', value: String(_siGuild.roles.cache.size), inline: true },
+${i}    { name: '😀 Emojis', value: String(_siGuild.emojis.cache.size), inline: true }
+${i}  );
+${i}await interaction.reply({ embeds: [_siEmbed], ephemeral: ${eph} });`;
+    }
+
+    case 'list_role_members': {
+      const roleId = a.role_id || '';
+      const eph = jb(a.ephemeral);
+      return `${i}// ── List Role Members ──
+${i}const { EmbedBuilder: _LREmbed } = require('discord.js');
+${i}await interaction.deferReply({ ephemeral: ${eph} });
+${i}const _lrRole = interaction.guild.roles.cache.find(r => r.name === ${j(roleId)} || r.id === ${j(roleId)});
+${i}if (!_lrRole) return interaction.editReply(\`❌ Role "${roleId}" not found.\`);
+${i}await interaction.guild.members.fetch();
+${i}const _lrMembers = _lrRole.members.map(m => \`\${m.user.tag} (\\\`\${m.id}\\\`)\`);
+${i}if (!_lrMembers.length) return interaction.editReply(\`❌ No members in **\${_lrRole.name}**.\`);
+${i}const _lrChunks = [];
+${i}for (let _li = 0; _li < _lrMembers.length; _li += 20) _lrChunks.push(_lrMembers.slice(_li, _li+20));
+${i}await interaction.editReply({ embeds: [new _LREmbed().setTitle(\`📋 \${_lrRole.name} — \${_lrMembers.length} member(s)\`).setDescription(_lrChunks[0].join('\\n')).setColor(_lrRole.hexColor||'#5865F2')] });
+${i}for (let _li=1;_li<Math.min(_lrChunks.length,4);_li++) await interaction.followUp({ embeds:[new _LREmbed().setDescription(_lrChunks[_li].join('\\n')).setColor(_lrRole.hexColor||'#5865F2')], ephemeral:${eph} });`;
+    }
+
+    case 'dm_user': {
+      const userOpt = a.target_user || 'user';
+      const msg = a.content || 'Hello!';
+      return `${i}// ── DM User ──
+${i}const _dmTarget = interaction.options.getUser(${j(userOpt)});
+${i}if (!_dmTarget) return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+${i}try {
+${i}  await _dmTarget.send(${j(msg)});
+${i}  await interaction.reply({ content: \`✅ DM sent to **\${_dmTarget.tag}**.\`, ephemeral: true });
+${i}} catch(e) { await interaction.reply({ content: '❌ Could not DM user (they may have DMs disabled).', ephemeral: true }); }`;
+    }
+
+    case 'repost_messages': {
+      const src = a.source_channel || '';
+      const tgt = a.target_channel || '';
+      const limit = parseInt(a.limit) || 20;
+      const inclLink = jb(a.include_link !== false);
+      return `${i}// ── Repost Messages ──
+${i}await interaction.deferReply({ ephemeral: true });
+${i}const _rpSrc = interaction.guild.channels.cache.find(c => c.name === ${j(src)} || c.id === ${j(src)});
+${i}const _rpTgt = interaction.guild.channels.cache.find(c => c.name === ${j(tgt)} || c.id === ${j(tgt)});
+${i}if (!_rpSrc) return interaction.editReply('❌ Source channel not found.');
+${i}if (!_rpTgt) return interaction.editReply('❌ Target channel not found.');
+${i}const _rpMsgs = await _rpSrc.messages.fetch({ limit: ${limit} });
+${i}const _rpArr = Array.from(_rpMsgs.values()).reverse();
+${i}let _rpCount = 0;
+${i}for (const _m of _rpArr) {
+${i}  let _txt = \`**\${_m.author.tag}** — \${new Date(_m.createdTimestamp).toLocaleString('en-US',{month:'numeric',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true})}\`;
+${i}  if (_m.content) _txt += \`\\n\${_m.content}\`;
+${i}  if (_m.attachments.size) _txt += '\\n' + Array.from(_m.attachments.values()).map(a=>\`📎 [\${a.name}](\${a.url})\`).join('\\n');
+${i}  if (${inclLink}) _txt += \`\\nOriginal: <#\${_m.channelId}> 🌊\`;
+${i}  try { await _rpTgt.send(_txt); _rpCount++; } catch(_){} 
+${i}  await new Promise(r=>setTimeout(r,700));
+${i}}
+${i}await interaction.editReply(\`✅ Reposted \${_rpCount}/\${_rpArr.length} messages to <#\${_rpTgt.id}>.\`);`;
+    }
+
+    default:
+      return `${i}// Unknown action type: ${a.type}`;
+  }
 }
 
 // ── FLOW PREVIEW ─────────────────────────────────────────────────────────────
@@ -1800,8 +2125,7 @@ async function genCode() {
   // Quote command: generate locally, no API needed
   if (flow.actions.some(a => a.type === 'quote_messages')) {
     const code = genQuoteCode(flow);
-    document.getElementById('code-out').value = code;
-    document.getElementById('dname').value    = flow.commandName;
+    setGeneratedCode(code, flow.commandName);
     if (window.innerWidth <= 900) {
       builderTab('code', document.querySelectorAll('.bmtab')[2]);
     }
@@ -1809,11 +2133,26 @@ async function genCode() {
     return;
   }
 
+  // Auto-inject needed options for utility actions that reference a user param
+  const utilUserActions = ['kick_member','ban_member','timeout_member','add_role','remove_role','user_info','dm_user'];
+  for (const a of flow.actions) {
+    if (utilUserActions.includes(a.type)) {
+      const optName = a.target_user || 'user';
+      const already = flow.trigger.options?.some(o => o.name === optName);
+      if (!already) {
+        flow.trigger.options = flow.trigger.options || [];
+        flow.trigger.options.push({ id: Date.now(), name: optName, type: 'user', description: 'Target user', required: true });
+        opts = flow.trigger.options;
+        renderOpts();
+        toast(`Auto-added "${optName}" user option for ${actLbl[a.type]}`, 'ok');
+      }
+    }
+  }
+
   const r = await api('/api/flow/generate', { method:'POST', body:JSON.stringify(flow) });
   const d = await r.json();
   if (d.success) {
-    document.getElementById('code-out').value = d.code;
-    document.getElementById('dname').value    = flow.commandName;
+    setGeneratedCode(d.code, flow.commandName);
     // On mobile, switch to code panel after generating
     if (window.innerWidth <= 900) {
       builderTab('code', document.querySelectorAll('.bmtab')[2]);
@@ -1848,6 +2187,34 @@ async function deploy() {
     res.textContent = '❌ ' + (d.error||'Unknown error');
     toast('Deploy failed', 'err');
   }
+}
+
+// ── CODE EDITOR HELPERS ──────────────────────────────────────────────────────
+let _lastGeneratedCode = '';
+
+function setGeneratedCode(code, name) {
+  _lastGeneratedCode = code;
+  document.getElementById('code-out').value = code;
+  if (name) document.getElementById('dname').value = name;
+  document.getElementById('reset-btn').style.display = 'none';
+}
+
+function onCodeEdit() {
+  const current = document.getElementById('code-out').value;
+  const resetBtn = document.getElementById('reset-btn');
+  // Show Reset button only if the code has been changed from generated
+  if (_lastGeneratedCode && current !== _lastGeneratedCode) {
+    resetBtn.style.display = 'inline-flex';
+  } else {
+    resetBtn.style.display = 'none';
+  }
+}
+
+function resetCode() {
+  if (!_lastGeneratedCode) { toast('No generated code to reset to', 'err'); return; }
+  document.getElementById('code-out').value = _lastGeneratedCode;
+  document.getElementById('reset-btn').style.display = 'none';
+  toast('Code reset to generated version', 'ok');
 }
 
 function copyCode() {

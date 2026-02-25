@@ -7,46 +7,67 @@ module.exports = {
     .setDescription('Quote one or more Discord messages by pasting their links')
     .addStringOption(opt =>
       opt.setName('links')
-         .setDescription('Paste message links separated by spaces (max 5)')
+         .setDescription('Paste message links separated by spaces (max 10)')
          .setRequired(true)
     ),
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: false });
 
-    const raw   = interaction.options.getString('links');
-    const links = raw.trim().split(/\s+/).slice(0, 5);
+    const raw    = interaction.options.getString('links');
+    const linkRe = /https?:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/g;
+    const links  = (raw.match(linkRe) || []).slice(0, 10);
 
-    // Regex to parse Discord message links
-    const linkRe = /https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/;
-
-    const lines = [];
-
-    for (const link of links) {
-      const m = link.match(linkRe);
-      if (!m) { lines.push(`⚠️ Invalid link: ${link}`); continue; }
-
-      const [, guildId, channelId, messageId] = m;
-
-      try {
-        const channel = await interaction.client.channels.fetch(channelId);
-        if (!channel || !channel.isTextBased()) {
-          lines.push(`⚠️ Can't access channel for: ${link}`);
-          continue;
-        }
-
-        const msg = await channel.messages.fetch(messageId);
-
-        const author    = `**${msg.author.tag}**`;
-        const content   = msg.content || '*(no text content)*';
-        const ts        = `<t:${Math.floor(msg.createdTimestamp / 1000)}:f>`;
-        lines.push(`> 💬 ${author} · ${ts}\n> ${content}\n> 🔗 ${link}`);
-      } catch (err) {
-        lines.push(`❌ Could not fetch message: ${link}`);
-      }
+    if (!links.length) {
+      return interaction.editReply('❌ No valid Discord message links found.');
     }
 
-    const reply = lines.join('\n\n');
-    await interaction.editReply(reply.length ? reply : '❌ No valid messages found.');
+    const parseLink = url => {
+      const m = url.match(/channels\/(\d+)\/(\d+)\/(\d+)/);
+      return m ? { channelId: m[2], messageId: m[3] } : null;
+    };
+
+    let first = true;
+
+    for (const link of links) {
+      const parsed = parseLink(link);
+      if (!parsed) {
+        const err = `❌ Invalid link: ${link}`;
+        if (first) { await interaction.editReply(err); first = false; }
+        else await interaction.followUp({ content: err, ephemeral: false });
+        continue;
+      }
+
+      try {
+        const channel = await interaction.client.channels.fetch(parsed.channelId);
+        if (!channel || !channel.isTextBased()) throw new Error('Channel not accessible');
+        const msg = await channel.messages.fetch(parsed.messageId);
+
+        const tag     = `${msg.author.username}#${msg.author.discriminator}`;
+        const dateStr = new Date(msg.createdTimestamp).toLocaleString('en-US', {
+          month: 'numeric', day: 'numeric', year: 'numeric',
+          hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+        });
+
+        let out = `**${tag}** — ${dateStr}`;
+        if (msg.content) out += `\n${msg.content}`;
+
+        if (msg.attachments && msg.attachments.size > 0) {
+          out += '\\n';
+          for (const att of msg.attachments.values()) {
+            out += `\\nAttachments: 📎 [${att.name || 'file'}](${att.url})`;
+          }
+        }
+        out += `\\n\\n Original: <#${msg.channelId}> 🌊`;
+
+        if (first) { await interaction.editReply(out); first = false; }
+        else await interaction.followUp({ content: out, ephemeral: false });
+
+      } catch (err) {
+        const errMsg = `❌ Could not fetch message: ${link}`;
+        if (first) { await interaction.editReply(errMsg); first = false; }
+        else await interaction.followUp({ content: errMsg, ephemeral: false });
+      }
+    }
   },
 };
