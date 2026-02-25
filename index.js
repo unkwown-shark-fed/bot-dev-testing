@@ -33,6 +33,25 @@ client.stats = {
   commandUsage:     {}
 };
 
+// ── Dashboard log helper ──────────────────────────────────────────────────────
+// Sends a log entry to the dashboard which forwards it to your configured
+// log channel as a Discord embed. Non-fatal — never crashes the bot.
+const DASHBOARD_URL  = process.env.DASHBOARD_URL  || 'http://localhost:3000';
+const DASHBOARD_PASS = process.env.DASHBOARD_PASSWORD || 'admin123';
+
+async function logCommandUse({ command, user, guild, channel, args = '', error = null }) {
+  try {
+    await fetch(`${DASHBOARD_URL}/api/log`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${DASHBOARD_PASS}`,
+      },
+      body: JSON.stringify({ command, user, guild, channel, args, error }),
+    });
+  } catch (_) {} // never crash the bot over logging
+}
+
 // ── Load commands from /commands folder ───────────────────────────────────────
 const commandsPath = path.join(__dirname, 'commands');
 if (!fs.existsSync(commandsPath)) fs.mkdirSync(commandsPath, { recursive: true });
@@ -57,8 +76,6 @@ for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) 
 logger.info(`📁 Loaded ${fileLoadedCount} file-based commands`);
 
 // ── Load dashboard commands from MongoDB ─────────────────────────────────────
-// FIX: expose a promise so we can await it before the bot is considered "ready"
-//      to avoid the race condition where commands arrive after the first interaction.
 let dbCommandsReady = false;
 
 const dbLoadPromise = (async () => {
@@ -69,7 +86,7 @@ const dbLoadPromise = (async () => {
 
     for (const record of dbCmds) {
       if (record.source !== 'dashboard' || !record.code) continue;
-      if (client.commands.has(record.name)) continue; // file version takes priority
+      if (client.commands.has(record.name)) continue;
 
       try {
         const Module = require('module');
@@ -94,7 +111,7 @@ const dbLoadPromise = (async () => {
     return dbCount;
   } catch (e) {
     logger.error(`MongoDB load failed: ${e.message} — continuing with file commands only`);
-    dbCommandsReady = true; // unblock interactions even on DB failure
+    dbCommandsReady = true;
     return 0;
   }
 })();
@@ -104,23 +121,55 @@ client.once('ready', async () => {
   logger.info(`✅ Logged in as ${client.user.tag}`);
   logger.info(`🌐 Serving ${client.guilds.cache.size} guild(s)`);
 
-  // FIX: wait for DB commands to finish loading before announcing / setting status
-  //      so the command count in the status is accurate and all commands are
-  //      available to handle the very first interaction after startup.
   await dbLoadPromise;
 
   const totalLoaded = client.commands.size;
   logger.info(`📊 Total commands ready: ${totalLoaded} — ${Array.from(client.commands.keys()).join(', ')}`);
 
-  client.user.setActivity(`${totalLoaded} commands | /help`, { type: ActivityType.Watching });
+  // Apply saved presence from config.json on startup
+  try {
+    const activityTypes = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
+    const status  = config.status  || 'online';
+    const acttype = config.acttype || 'Listening';
+    const acttext = config.acttext || '';
+    client.user.setPresence({
+      status,
+      activities: acttext ? [{ name: acttext, type: activityTypes[acttype] ?? 2 }] : [],
+    });
+    logger.info(`🟢 Presence set: ${status} / ${acttype} ${acttext}`);
+  } catch (e) {
+    logger.warn(`Failed to set initial presence: ${e.message}`);
+  }
+
+  // ── Presence watcher ────────────────────────────────────────────────────────
+  // When you save Presence settings in the dashboard, it writes a
+  // .presence_update.json file. This watcher picks it up and applies it live
+  // without needing a bot restart.
+  setInterval(() => {
+    const pFile = path.join(__dirname, '.presence_update.json');
+    if (!fs.existsSync(pFile)) return;
+    try {
+      const { status, acttype, acttext, ts } = JSON.parse(fs.readFileSync(pFile, 'utf8'));
+      // Only apply if written within the last 60 seconds
+      if (Date.now() - ts > 60_000) return;
+
+      const activityTypes = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
+      client.user.setPresence({
+        status: status || 'online',
+        activities: acttext ? [{ name: acttext, type: activityTypes[acttype] ?? 2 }] : [],
+      });
+      logger.info(`[presence] Updated: ${status} / ${acttype} ${acttext}`);
+      fs.unlinkSync(pFile); // delete after applying so it doesn't re-trigger
+    } catch (e) {
+      logger.warn(`[presence] Failed to apply update: ${e.message}`);
+    }
+  }, 15_000); // checks every 15 seconds
 });
 
 // ── Interaction handler ───────────────────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  // FIX: if DB hasn't finished loading yet (very fast first interaction),
-  //      wait for it rather than silently ignoring DB-sourced commands.
   if (!dbCommandsReady) {
     await dbLoadPromise;
   }
@@ -191,10 +240,28 @@ client.on('interactionCreate', async interaction => {
     db.incrementUsage(interaction.commandName).catch(() => {});
 
     logger.info(`✅ ${interaction.user.tag} used /${interaction.commandName} in ${interaction.guild?.name || 'DM'}`);
+
+    // ✅ Log successful command use to dashboard → log channel
+    logCommandUse({
+      command: interaction.commandName,
+      user:    interaction.user.tag,
+      guild:   interaction.guild?.name || 'DM',
+      channel: interaction.channel?.name || '?',
+    });
+
   } catch (err) {
     client.stats.errors++;
     db.incrementError(interaction.commandName).catch(() => {});
     logger.error(`❌ Error executing /${interaction.commandName} by ${interaction.user.tag}: ${err.stack || err}`);
+
+    // ❌ Log failed command to dashboard → error channel
+    logCommandUse({
+      command: interaction.commandName,
+      user:    interaction.user.tag,
+      guild:   interaction.guild?.name || 'DM',
+      channel: interaction.channel?.name || '?',
+      error:   err.message,
+    });
 
     const errorMsg = '⚠️ There was an error while executing this command.';
     try {

@@ -21,6 +21,7 @@ const fs           = require('fs');
 const path         = require('path');
 const WebSocket    = require('ws');
 const { REST, Routes } = require('discord.js');
+const mongoose     = require('mongoose');
 const db           = require('./db');
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -32,6 +33,22 @@ const LOG_DIR   = path.join(ROOT, 'logs');
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+// ── Schedule Model ─────────────────────────────────────────────────────────────
+function getScheduleModel() {
+  if (mongoose.models.Schedule) return mongoose.models.Schedule;
+  const scheduleSchema = new mongoose.Schema({
+    label:     { type: String, default: 'Unnamed' },
+    channel:   { type: String, required: true },
+    message:   { type: String, default: '' },
+    repeat:    { type: String, enum: ['once','hourly','daily','weekly'], default: 'once' },
+    nextRun:   { type: Date, default: null },
+    active:    { type: Boolean, default: true },
+    embed:     { type: mongoose.Schema.Types.Mixed, default: null },
+    createdAt: { type: Date, default: Date.now },
+  });
+  return mongoose.model('Schedule', scheduleSchema);
+}
 
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
@@ -141,6 +158,167 @@ app.get('/api/stats', auth, async (_req, res) => {
   } catch (_) {}
   if (botProcess) stats.uptime = Math.floor((Date.now() - botProcess.startTime) / 1000);
   res.json(stats);
+});
+
+// ── Settings (GET) ────────────────────────────────────────────────────────────
+app.get('/api/settings', auth, (_req, res) => {
+  try {
+    const cfgPath = path.join(ROOT, 'config.json');
+    let cfg = {};
+    if (fs.existsSync(cfgPath)) cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    const settings = {
+      nick:     cfg.botNick  || '',
+      prefix:   cfg.prefix   || '!',
+      status:   cfg.status   || 'idle',
+      acttype:  cfg.acttype  || 'Listening',
+      acttext:  cfg.acttext  || 'with commands',
+      unknown:  cfg.unknown  || 'Unknown command.',
+      error:    cfg.error    || 'Something went wrong.',
+      cooldown: cfg.cooldown || 'Please wait before using this again.',
+      logch:    cfg.logch    || process.env.LOG_CHANNEL   || '',
+      errch:    cfg.errch    || process.env.ERROR_CHANNEL || '',
+      devmode:  cfg.devmode  || false,
+      dms:      cfg.dms !== undefined ? cfg.dms : true,
+    };
+    res.json({ success: true, settings });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Settings (POST) ───────────────────────────────────────────────────────────
+app.post('/api/settings', auth, async (req, res) => {
+  try {
+    const { section, ...data } = req.body;
+    const cfgPath = path.join(ROOT, 'config.json');
+    let cfg = {};
+    if (fs.existsSync(cfgPath)) cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    Object.assign(cfg, data);
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+
+    // If presence-related settings changed, apply to live bot via Discord Gateway
+    if (section === 'presence' || data.status || data.acttype || data.acttext || data.nick) {
+      await applyPresenceToDiscord(cfg).catch(e => console.warn('[presence] apply failed:', e.message));
+    }
+
+    res.json({ success: true, message: `${section || 'Settings'} saved` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Apply presence / nick to live Discord bot ─────────────────────────────────
+async function applyPresenceToDiscord(cfg) {
+  if (!TOKEN || !CLIENT_ID || !GUILD_IDS.length) return;
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+  // Update bot nickname in all guilds
+  if (cfg.nick !== undefined) {
+    for (const gid of GUILD_IDS) {
+      await rest.patch(Routes.guildMember(CLIENT_ID, gid), { body: { nick: cfg.nick || null } })
+        .catch(() => {}); // may fail if missing perms — non-fatal
+    }
+  }
+
+  // Presence (online/idle/dnd/invisible) + activity can only be set via Gateway (WebSocket),
+  // not REST. We signal the running bot process via a temp file it watches.
+  const presenceFile = path.join(ROOT, '.presence_update.json');
+  fs.writeFileSync(presenceFile, JSON.stringify({
+    status:   cfg.status  || 'online',
+    acttype:  cfg.acttype || 'Listening',
+    acttext:  cfg.acttext || '',
+    ts: Date.now(),
+  }));
+  console.log('[settings] Presence file written — bot will pick it up on next cycle');
+}
+
+// ── Settings apply endpoint (manual trigger) ──────────────────────────────────
+app.post('/api/settings/apply', auth, async (req, res) => {
+  try {
+    const cfgPath = path.join(ROOT, 'config.json');
+    const cfg = fs.existsSync(cfgPath) ? JSON.parse(fs.readFileSync(cfgPath, 'utf8')) : {};
+    await applyPresenceToDiscord(cfg);
+    res.json({ success: true, message: 'Presence applied to Discord' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Danger Zone ───────────────────────────────────────────────────────────────
+app.post('/api/danger/:op', auth, async (req, res) => {
+  const { op } = req.params;
+  try {
+    if (op === 'clear-commands') {
+      // Unregister all guild commands from Discord
+      if (TOKEN && CLIENT_ID && GUILD_IDS.length) {
+        const rest = new REST({ version: '10' }).setToken(TOKEN);
+        for (const gid of GUILD_IDS) {
+          await rest.put(Routes.applicationGuildCommands(CLIENT_ID, gid), { body: [] });
+        }
+      }
+      // Wipe DB command records
+      await db.connect();
+      await db.Command.deleteMany({});
+      res.json({ success: true, message: 'All commands cleared from Discord & DB' });
+
+    } else if (op === 'reset-stats') {
+      await db.connect();
+      await db.Command.updateMany({}, { $set: { usageCount: 0, errorCount: 0, lastUsedAt: null } });
+      res.json({ success: true, message: 'Usage stats reset' });
+
+    } else if (op === 'flush-cache') {
+      // Clear Node require cache for all command files
+      if (fs.existsSync(CMD_DIR)) {
+        for (const f of fs.readdirSync(CMD_DIR).filter(f => f.endsWith('.js'))) {
+          try { delete require.cache[require.resolve(path.join(CMD_DIR, f))]; } catch (_) {}
+        }
+      }
+      res.json({ success: true, message: 'Require cache flushed' });
+
+    } else {
+      res.status(400).json({ error: 'Unknown operation: ' + op });
+    }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+app.get('/api/schedules', auth, async (_req, res) => {
+  try {
+    await db.connect();
+    const Schedule = getScheduleModel();
+    const schedules = await Schedule.find().sort({ createdAt: -1 }).lean();
+    res.json({ success: true, schedules });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/schedules", auth, async (req, res) => {
+  try {
+    await db.connect();
+    const Schedule = getScheduleModel();
+    // Always set a valid nextRun — if not provided, default to NOW so
+    // the runner picks it up on the very next tick (within 1 minute).
+    let nextRun = req.body.nextRun ? new Date(req.body.nextRun) : new Date();
+    if (isNaN(nextRun.getTime())) nextRun = new Date();
+    const schedule = await Schedule.create({ ...req.body, nextRun, active: true, createdAt: new Date() });
+    res.json({ success: true, schedule });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.patch("/api/schedules/:id", auth, async (req, res) => {
+  try {
+    await db.connect();
+    const Schedule = getScheduleModel();
+    const update = { ...req.body };
+    if (update.nextRun) {
+      const d = new Date(update.nextRun);
+      update.nextRun = isNaN(d.getTime()) ? new Date() : d;
+    }
+    await Schedule.findByIdAndUpdate(req.params.id, update);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/schedules/:id', auth, async (req, res) => {
+  try {
+    await db.connect();
+    const Schedule = getScheduleModel();
+    await Schedule.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Commands CRUD ─────────────────────────────────────────────────────────────
@@ -340,11 +518,9 @@ function buildModalFormAction(a, ind = '    ') {
   const responseCh    = a.responseChannel || '';
   const useEmbed      = a.responseEmbed !== false;
   const fields        = (a.modalFields  || []).filter(f => f.label);
-  // Use fixed IDs based on command name so they survive bot restarts
   const modalId       = `modal_form_submit`;
   const btnId         = `modal_form_open`;
 
-  // Build field definitions (used inside the interactionCreate handler)
   const fieldDefs = fields.map((f, i) => {
     const style = f.style === 'paragraph' ? 'TextInputStyle.Paragraph' : 'TextInputStyle.Short';
     return `    const field${i} = new TextInputBuilder()
@@ -359,7 +535,6 @@ function buildModalFormAction(a, ind = '    ') {
     `    modal.addComponents(new ActionRowBuilder().addComponents(field${i}));`
   ).join('\n');
 
-  // Build response code (runs after modal submit)
   let responseCode;
   if (useEmbed) {
     const fieldLines = fields.map((f, i) =>
@@ -475,7 +650,6 @@ function generateFlowCode(flow) {
 }
 
 function genSlash(name, desc, trigger, conditions, actions) {
-  // Determine which imports are needed
   const hasModal   = actions.some(a => a.type === 'modal_form');
   const hasEmbed   = needsEmbed(actions);
 
@@ -617,7 +791,6 @@ app.post('/api/embed/send', auth, async (req, res) => {
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-    // Find the channel across all configured guilds
     let channelId = null;
     for (const guildId of GUILD_IDS) {
       try {
@@ -631,7 +804,6 @@ app.post('/api/embed/send', auth, async (req, res) => {
 
     if (!channelId) return res.status(404).json({ error: `Channel "${channelInput}" not found in any configured guild` });
 
-    // Build the Discord embed object
     const discordEmbed = {};
     if (embed.title)       discordEmbed.title       = embed.title;
     if (embed.description) discordEmbed.description = embed.description;
@@ -643,11 +815,9 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (embed.image)       discordEmbed.image        = { url: embed.image };
     if (embed.fields?.length) discordEmbed.fields   = embed.fields.map(f => ({ name: f.name, value: f.value, inline: !!f.inline }));
 
-    // Build payload
     const payload = { embeds: [discordEmbed] };
     if (content) payload.content = content;
 
-    // Build button components (link buttons only from this endpoint)
     if (buttons.length) {
       payload.components = [{
         type: 1,
@@ -691,3 +861,126 @@ setInterval(() => broadcast('status', { status: botStatus }), 6000);
 
 process.on('SIGTERM', () => { if (botProcess) botProcess.kill('SIGTERM'); server.close(); process.exit(0); });
 process.on('SIGINT',  () => { if (botProcess) botProcess.kill('SIGTERM'); server.close(); process.exit(0); });
+
+// ── Scheduler Runner ──────────────────────────────────────────────────────────
+async function runScheduler() {
+  if (!TOKEN || !GUILD_IDS.length) return;
+  try {
+    await db.connect();
+    const Schedule = getScheduleModel();
+    const now = new Date();
+    const due = await Schedule.find({ active: true, $or: [{ nextRun: { $lte: now } }, { nextRun: null }] });
+    console.log(`[scheduler] Tick — ${due.length} schedule(s) due`);
+    if (!due.length) return;
+
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+    // Resolve channel IDs once across all guilds
+    let allChannels = [];
+    for (const gid of GUILD_IDS) {
+      try {
+        const chs = await rest.get(Routes.guildChannels(gid));
+        allChannels.push(...chs);
+      } catch (_) {}
+    }
+
+    for (const sched of due) {
+      try {
+        const ch = allChannels.find(c =>
+          c.name === sched.channel || c.id === sched.channel
+        );
+        if (!ch) { console.warn(`[scheduler] Channel not found: ${sched.channel}`); continue; }
+
+        const payload = {};
+        if (sched.message) payload.content = sched.message;
+        if (sched.embed) {
+          const embed = { ...sched.embed };
+          if (typeof embed.color === "string") {
+            embed.color = parseInt(embed.color.replace("#", ""), 16);
+          }
+          payload.embeds = [embed];
+        }
+        if (!payload.content && !payload.embeds?.length) payload.content = '*(scheduled message)*';
+
+        await rest.post(Routes.channelMessages(ch.id), { body: payload });
+        console.log(`[scheduler] Sent "${sched.label}" to #${sched.channel}`);
+
+        // Calculate next run or deactivate
+        let nextRun = null;
+        if (sched.repeat === 'hourly') nextRun = new Date(now.getTime() + 60 * 60 * 1000);
+        if (sched.repeat === 'daily')  nextRun = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        if (sched.repeat === 'weekly') nextRun = new Date(now.getTime() + 7  * 24 * 60 * 60 * 1000);
+
+        if (nextRun) {
+          await Schedule.findByIdAndUpdate(sched._id, { nextRun });
+        } else {
+          await Schedule.findByIdAndUpdate(sched._id, { active: false, nextRun: null });
+        }
+      } catch (e) {
+        console.error(`[scheduler] Error for "${sched.label}":`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error('[scheduler] Runner error:', e.message);
+  }
+}
+setInterval(runScheduler, 60 * 1000); // check every minute
+runScheduler();                        // also fire on startup
+
+// ── Command Log to Channel ────────────────────────────────────────────────────
+// Your index.js should POST to /api/log with: { command, user, guild, channel, args }
+// The dashboard will forward this to the configured logch channel.
+app.post('/api/log', async (req, res) => {
+  try {
+    const { command, user, guild, channel, args, error: cmdError } = req.body;
+    if (!command) return res.status(400).json({ error: 'command is required' });
+
+    // Add to internal log stream too
+    const logLine = `[CMD] /${command}${args ? ` ${args}` : ''} — by ${user || '?'} in #${channel || '?'} (${guild || '?'})${cmdError ? ` ❌ ${cmdError}` : ''}`;
+    addLog(cmdError ? 'error' : 'info', logLine);
+    broadcast('log', { type: cmdError ? 'error' : 'info', message: logLine, timestamp: new Date().toISOString() });
+
+    // Send to configured log channel if set
+    if (TOKEN && GUILD_IDS.length) {
+      const cfgPath = path.join(ROOT, 'config.json');
+      const cfg = fs.existsSync(cfgPath) ? JSON.parse(fs.readFileSync(cfgPath, 'utf8')) : {};
+      const logChannel = cfg.logch || process.env.LOG_CHANNEL;
+      const errChannel = cfg.errch || process.env.ERROR_CHANNEL;
+      const targetCh   = cmdError ? (errChannel || logChannel) : logChannel;
+
+      if (targetCh) {
+        const rest = new REST({ version: '10' }).setToken(TOKEN);
+        let channelId = null;
+
+        for (const gid of GUILD_IDS) {
+          try {
+            const chs = await rest.get(Routes.guildChannels(gid));
+            const match = chs.find(c => c.name === targetCh || c.id === targetCh);
+            if (match) { channelId = match.id; break; }
+          } catch (_) {}
+        }
+
+        if (channelId) {
+          const color = cmdError ? 0xED4245 : 0x57F287;
+          const embed = {
+            color,
+            title: cmdError ? `❌ Command Error: /${command}` : `✅ Command Used: /${command}`,
+            fields: [
+              { name: 'User',    value: user    || 'Unknown', inline: true },
+              { name: 'Channel', value: channel ? `#${channel}` : 'Unknown', inline: true },
+              { name: 'Server',  value: guild   || 'Unknown', inline: true },
+              ...(args     ? [{ name: 'Arguments', value: `\`${args}\`` }]        : []),
+              ...(cmdError ? [{ name: 'Error',     value: `\`\`\`${cmdError}\`\`\`` }] : []),
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: 'Bot Command Log' },
+          };
+          await rest.post(Routes.channelMessages(channelId), { body: { embeds: [embed] } })
+            .catch(e => console.warn('[log] Failed to send to channel:', e.message));
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
