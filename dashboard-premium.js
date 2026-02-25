@@ -607,6 +607,67 @@ ${acts}
 `;
 }
 
+// ── Embed Send ────────────────────────────────────────────────────────────────
+app.post('/api/embed/send', auth, async (req, res) => {
+  try {
+    const { channel: channelInput, embed, buttons = [], content = '' } = req.body;
+    if (!channelInput) return res.status(400).json({ error: 'channel is required' });
+    if (!TOKEN)        return res.status(500).json({ error: 'DISCORD_TOKEN not configured' });
+    if (!GUILD_IDS.length) return res.status(500).json({ error: 'GUILD_IDS not configured' });
+
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+    // Find the channel across all configured guilds
+    let channelId = null;
+    for (const guildId of GUILD_IDS) {
+      try {
+        const channels = await rest.get(Routes.guildChannels(guildId));
+        const match = channels.find(c =>
+          c.id === channelInput || c.name === channelInput.replace('#', '')
+        );
+        if (match) { channelId = match.id; break; }
+      } catch (_) {}
+    }
+
+    if (!channelId) return res.status(404).json({ error: `Channel "${channelInput}" not found in any configured guild` });
+
+    // Build the Discord embed object
+    const discordEmbed = {};
+    if (embed.title)       discordEmbed.title       = embed.title;
+    if (embed.description) discordEmbed.description = embed.description;
+    if (embed.color)       discordEmbed.color        = parseInt(embed.color.replace('#', ''), 16);
+    if (embed.author)      discordEmbed.author       = { name: embed.author, ...(embed.authorIcon ? { icon_url: embed.authorIcon } : {}) };
+    if (embed.footer)      discordEmbed.footer       = { text: embed.footer };
+    if (embed.timestamp === 'current') discordEmbed.timestamp = new Date().toISOString();
+    if (embed.thumbnail)   discordEmbed.thumbnail    = { url: embed.thumbnail };
+    if (embed.image)       discordEmbed.image        = { url: embed.image };
+    if (embed.fields?.length) discordEmbed.fields   = embed.fields.map(f => ({ name: f.name, value: f.value, inline: !!f.inline }));
+
+    // Build payload
+    const payload = { embeds: [discordEmbed] };
+    if (content) payload.content = content;
+
+    // Build button components (link buttons only from this endpoint)
+    if (buttons.length) {
+      payload.components = [{
+        type: 1,
+        components: buttons.slice(0, 5).map(b => ({
+          type: 2,
+          style: { Link: 5, Primary: 1, Secondary: 2, Success: 3, Danger: 4 }[b.style] || 5,
+          label: b.label || 'Click me',
+          ...(b.style === 'Link' || !b.style ? { url: b.url || 'https://discord.com' } : { custom_id: b.customId || `btn_${Date.now()}` })
+        }))
+      }];
+    }
+
+    await rest.post(Routes.channelMessages(channelId), { body: payload });
+    res.json({ ok: true, channelId });
+  } catch (err) {
+    console.error('[embed/send]', err);
+    res.status(500).json({ error: err.message || 'Failed to send embed' });
+  }
+});
+
 // ── Server & WebSocket ────────────────────────────────────────────────────────
 const server = app.listen(PORT, async () => {
   console.log(`\n🚀 Bot Studio  →  http://localhost:${PORT}`);

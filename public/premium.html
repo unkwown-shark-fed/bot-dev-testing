@@ -474,6 +474,16 @@ input[type=color] { cursor: pointer; }
 .ep-thumb { float:right; width:70px; height:70px; border-radius:6px; object-fit:cover; margin-left:12px; }
 .ep-footer { font-size:11px; color:var(--t3); display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
 
+/* Plain text message above embed preview */
+.ep-content {
+  font-size: 14px;
+  color: var(--t1);
+  margin-bottom: 8px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Embed preview buttons */
 .ep-btns { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; max-width:520px; }
 .ep-btn {
@@ -956,6 +966,13 @@ input[type=color] { cursor: pointer; }
         <div class="cpanel" style="width:360px;overflow-y:auto">
           <div class="csec">
             <div class="csec-hd">🎨 Embed Builder</div>
+            <div class="frow">
+              <div class="flabel">Message <span class="fsub">plain text above embed</span></div>
+              <textarea class="ftextarea" id="eb-content" placeholder="@Customs ← tag a role, or write an announcement…" oninput="liveEmbed()" style="min-height:60px"></textarea>
+            </div>
+          </div>
+          <div class="csec">
+            <div class="csec-hd">📋 Embed</div>
             <div class="frow">
               <div class="flabel">Title</div>
               <input class="finput" id="eb-title" placeholder="Embed title" oninput="liveEmbed()">
@@ -2032,6 +2049,7 @@ function renderEmbedFields() {
 
 function getEmbedData() {
   return {
+    content:    document.getElementById('eb-content').value.trim(),
     title:      document.getElementById('eb-title').value.trim(),
     description:document.getElementById('eb-desc').value.trim(),
     color:      document.getElementById('eb-color').value || '#6c63ff',
@@ -2075,6 +2093,7 @@ function liveEmbed() {
     </div>` : '';
 
   el.innerHTML = `
+    ${e.content ? `<div class="ep-content">${esc(e.content)}</div>` : ''}
     <div class="ep-wrap" style="border-left-color:${esc(e.color)}">
       ${thumbHtml}
       ${authorHtml}
@@ -2096,7 +2115,7 @@ async function sendEmbed() {
   const e = getEmbedData();
   if (!e.title && !e.description) { toast('Add a title or description', 'err'); return; }
   try {
-    const d = await api('/api/embed/send', { method:'POST', body: JSON.stringify({ channel, embed: e, buttons: ebBtns }) }).then(r => r.json());
+    const d = await api('/api/embed/send', { method:'POST', body: JSON.stringify({ channel, embed: e, buttons: ebBtns, content: e.content }) }).then(r => r.json());
     toast(d.success ? `✅ Embed sent to #${channel}!` : (d.error || 'Failed'), d.success ? 'ok' : 'err');
   } catch(ex) { toast('Error: ' + ex.message, 'err'); }
 }
@@ -2104,6 +2123,7 @@ async function sendEmbed() {
 function copyEmbedJSON() {
   const e = getEmbedData();
   const djsObj = {
+    ...(e.content && { content: e.content }),
     embeds: [{
       ...(e.title && { title: e.title }),
       ...(e.description && { description: e.description }),
@@ -2127,7 +2147,7 @@ function copyEmbedJSON() {
 }
 
 function clearEmbed() {
-  ['eb-title','eb-desc','eb-author','eb-authoricon','eb-footer','eb-thumb','eb-image','eb-channel'].forEach(id => {
+  ['eb-content','eb-title','eb-desc','eb-author','eb-authoricon','eb-footer','eb-thumb','eb-image','eb-channel'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
