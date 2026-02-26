@@ -156,7 +156,7 @@ module.exports = {
     const buttonRows = buildButtonsFromCommand(interaction);
 
     await interaction.reply({
-      content: `## 📢 **Community Custom Matches: February schedule** <@&${ROLE_ID}>`,
+      content: `## 📢 **Community Custom Matches: March schedule** <@&${ROLE_ID}>`,
       embeds: [buildEmbed()],
       components: buttonRows,
       allowedMentions: {
