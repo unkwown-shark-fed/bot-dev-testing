@@ -15,10 +15,10 @@ Rewards & rules: Tap to [read](https://discord.com/channels/410479299347480576/9
 `;
 
 const MATCH_DATES = [
-  '7 February 2026',
-  '8 February 2026',
-  '21 February 2026',
-  '22 February 2026'
+  '13 March 2026',
+  '14 March 2026',
+  '20 March 2026',
+  '21 March 2026'
 ];
 
 const ALL_MAPS = ['Erangel', 'Sanhok', 'Miramar', 'Vikendi', 'Rondo'];
