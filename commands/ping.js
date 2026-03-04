@@ -1,9 +1,10 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { createCommandBuilder } = require('../utils/builders');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('ping')
-    .setDescription('Check bot latency and API ping'),
+  data: createCommandBuilder({
+    name: 'ping',
+    description: 'Check bot latency and API ping',
+  }),
   cooldown: 3,
   async execute(interaction) {
     const sent = await interaction.reply({ content: '🏓 Pinging...', fetchReply: true });

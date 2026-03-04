@@ -1,10 +1,12 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { createCommandBuilder, createEmbed } = require('../utils/builders');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('listusers')
-    .setDescription('Show a paginated list of server users in a specific role (username and ID).')
-    .addRoleOption(o => o.setName('role').setDescription('Role to list members of').setRequired(true)),
+  data: createCommandBuilder({
+    name: 'listusers',
+    description: 'Show a paginated list of server users in a specific role (username and ID).',
+    configure: builder => builder.addRoleOption(o => o.setName('role').setDescription('Role to list members of').setRequired(true)),
+  }),
   /**
    * @param {import('discord.js').CommandInteraction} interaction
    */
@@ -57,10 +59,11 @@ module.exports = {
     let current = 0;
 
     const buildEmbed = (pageIndex) => {
-      return new EmbedBuilder()
-        .setTitle(`${guild.name} — Members with role: ${role.name}`)
-        .setDescription(pages[pageIndex].join('\n'))
-        .setFooter({
+      return createEmbed({
+        title: `${guild.name} — Members with role: ${role.name}`,
+        description: pages[pageIndex].join('\n'),
+        timestamp: false,
+      }).setFooter({
           text: `Page ${pageIndex + 1} / ${pages.length} • ${memberList.length} members${usedCache ? ' (partial - cache used)' : ''}`,
         });
     };

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { createCommandBuilder, createEmbed, EMBED_COLORS } = require('../utils/builders');
 
 function shuffle(array) {
   const a = Array.from(array);
@@ -30,13 +30,15 @@ function chunkLines(lines, maxLen = 1000) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('schedule')
-    .setDescription('Generate a randomized match schedule (maps + modes). Miramar only Duo/Squad.')
-    .addIntegerOption(o => o.setName('total_matches').setDescription('Total matches to schedule (default 6)').setRequired(false))
-    .addIntegerOption(o => o.setName('maps_to_select').setDescription('How many maps to pick from pool (default 3)').setRequired(false))
-    .addStringOption(o => o.setName('maps').setDescription('Optional comma-separated map list').setRequired(false))
-    .addStringOption(o => o.setName('modes').setDescription('Optional comma-separated modes list').setRequired(false)),
+  data: createCommandBuilder({
+    name: 'schedule',
+    description: 'Generate a randomized match schedule (maps + modes). Miramar only Duo/Squad.',
+    configure: builder => builder
+      .addIntegerOption(o => o.setName('total_matches').setDescription('Total matches to schedule (default 6)').setRequired(false))
+      .addIntegerOption(o => o.setName('maps_to_select').setDescription('How many maps to pick from pool (default 3)').setRequired(false))
+      .addStringOption(o => o.setName('maps').setDescription('Optional comma-separated map list').setRequired(false))
+      .addStringOption(o => o.setName('modes').setDescription('Optional comma-separated modes list').setRequired(false)),
+  }),
   cooldown: 3,
   async execute(interaction) {
     const DEFAULT_TOTAL = 6;
@@ -74,11 +76,10 @@ module.exports = {
     const matchLines = matches.map(m => `${m.match}. ${m.map} — ${m.mode}`);
     const blocks = chunkLines(matchLines, 1000);
 
-    const embed = new EmbedBuilder()
-      .setTitle('Match Schedule')
-      .setColor(0x00AE86)
-      .setTimestamp()
-      .addFields(
+    const embed = createEmbed({
+      title: 'Match Schedule',
+      color: EMBED_COLORS.info,
+    }).addFields(
         { name: 'Selected maps', value: selectedMaps.join(', '), inline: false },
         { name: 'Modes pool', value: modesPool.join(', '), inline: false },
         { name: 'Total matches', value: String(totalMatches), inline: true },
