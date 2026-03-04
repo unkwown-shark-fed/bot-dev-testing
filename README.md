@@ -121,6 +121,16 @@ npm start
 
 ---
 
+
+## 🧱 Builder System Guide
+
+A full beginner-friendly guide for command/embed/buttons/modals/select menus and response behavior is available at:
+
+- `docs/BUILDER_PLAYBOOK.md`
+
+It includes "if you set X, then Y happens" explanations and practical flow examples.
+
+---
 ## 🔧 NPM Scripts
 
 ```bash

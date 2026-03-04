@@ -1,9 +1,10 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { createCommandBuilder, createEmbed, EMBED_COLORS } = require('../utils/builders');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('help')
-    .setDescription('Show all available commands and their descriptions'),
+  data: createCommandBuilder({
+    name: 'help',
+    description: 'Show all available commands and their descriptions',
+  }),
   cooldown: 5,
   async execute(interaction) {
     const commands = interaction.client.commands;
@@ -16,12 +17,12 @@ module.exports = {
       '🎮 Gaming': ['schedule', 'generate']
     };
 
-    const embed = new EmbedBuilder()
-      .setTitle('📚 Bot Commands')
-      .setColor(0x5865F2)
-      .setDescription('Here are all available commands:')
-      .setTimestamp()
-      .setFooter({ text: `Total: ${commands.size} commands` });
+    const embed = createEmbed({
+      title: '📚 Bot Commands',
+      color: EMBED_COLORS.primary,
+      description: 'Here are all available commands:',
+      footer: { text: `Total: ${commands.size} commands` },
+    });
 
     for (const [category, cmdNames] of Object.entries(categories)) {
       const categoryCommands = cmdNames

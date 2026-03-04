@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits } = require('discord.js');
+const { createCommandBuilder } = require('../utils/builders');
 
 const DEFAULT_MAX_SEND = parseInt(process.env.REPOST_MAX_SEND || '200', 10); // safety cap
 const DEFAULT_PER_REQUEST = 100;
@@ -141,16 +142,18 @@ function buildRepostText(msg, options) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('repost')
-    .setDescription('Fetch messages (range or last N) and repost them as messages in a target channel (no CSV).')
-    .addChannelOption(o => o.setName('source').setDescription('Source channel to fetch from (defaults to current channel)').setRequired(false))
-    .addStringOption(o => o.setName('start_id').setDescription('Start message ID (used with end_id)').setRequired(false))
-    .addStringOption(o => o.setName('end_id').setDescription('End message ID (used with start_id)').setRequired(false))
-    .addIntegerOption(o => o.setName('limit').setDescription('Max messages to fetch and repost (default 50, max controlled)').setRequired(false))
-    .addChannelOption(o => o.setName('target').setDescription('Where to post the reposted messages (defaults to current channel)').setRequired(false))
-    .addBooleanOption(o => o.setName('sanitize').setDescription('Sanitize mentions to avoid pings (default true)').setRequired(false))
-    .addBooleanOption(o => o.setName('include_link').setDescription('Include original message link beneath each repost (default false)').setRequired(false))
+  data: createCommandBuilder({
+    name: 'repost',
+    description: 'Fetch messages (range or last N) and repost them as messages in a target channel (no CSV).',
+    configure: builder => builder
+      .addChannelOption(o => o.setName('source').setDescription('Source channel to fetch from (defaults to current channel)').setRequired(false))
+      .addStringOption(o => o.setName('start_id').setDescription('Start message ID (used with end_id)').setRequired(false))
+      .addStringOption(o => o.setName('end_id').setDescription('End message ID (used with start_id)').setRequired(false))
+      .addIntegerOption(o => o.setName('limit').setDescription('Max messages to fetch and repost (default 50, max controlled)').setRequired(false))
+      .addChannelOption(o => o.setName('target').setDescription('Where to post the reposted messages (defaults to current channel)').setRequired(false))
+      .addBooleanOption(o => o.setName('sanitize').setDescription('Sanitize mentions to avoid pings (default true)').setRequired(false))
+      .addBooleanOption(o => o.setName('include_link').setDescription('Include original message link beneath each repost (default false)').setRequired(false)),
+  })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
   cooldown: 10,
   async execute(interaction) {

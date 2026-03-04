@@ -1,13 +1,16 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits } = require('discord.js');
+const { createCommandBuilder } = require('../utils/builders');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('cleanup')
-    .setDescription('Bulk delete messages in a channel (admin only)')
-    .addIntegerOption(o => o.setName('amount').setDescription('Number of messages to delete (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
-    .addUserOption(o => o.setName('user').setDescription('Only delete messages from this user').setRequired(false))
-    .addBooleanOption(o => o.setName('bots_only').setDescription('Only delete bot messages').setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+  data: createCommandBuilder({
+    name: 'cleanup',
+    description: 'Bulk delete messages in a channel (admin only)',
+    defaultMemberPermissions: PermissionFlagsBits.ManageMessages,
+    configure: builder => builder
+      .addIntegerOption(o => o.setName('amount').setDescription('Number of messages to delete (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
+      .addUserOption(o => o.setName('user').setDescription('Only delete messages from this user').setRequired(false))
+      .addBooleanOption(o => o.setName('bots_only').setDescription('Only delete bot messages').setRequired(false)),
+  }),
   cooldown: 10,
 
   // FIX: accept logger as third param (passed by index.js); fall back to console if not provided

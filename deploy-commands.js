@@ -1,7 +1,8 @@
 const { REST, Routes } = require('discord.js');
 require('dotenv').config();
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
+const { loadCommandModules } = require('./utils/command-loader');
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
@@ -15,35 +16,20 @@ if (!token || !clientId || guildIds.length === 0) {
 
 // ── Auto-scan /commands folder ───────────────────────────────────────────────
 const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+const { loaded, skipped } = loadCommandModules({
+  commandsPath,
+  clearCache: true,
+  requireExecute: false,
+});
 
-const commands = [];
-const skipped = [];
-
-for (const file of commandFiles) {
-  try {
-    // Clear require cache so re-deploys always pick up latest file version
-    const filePath = path.join(commandsPath, file);
-    delete require.cache[require.resolve(filePath)];
-
-    const command = require(filePath);
-
-    if (!command?.data?.toJSON) {
-      skipped.push(`${file} — missing data.toJSON() (not a valid SlashCommandBuilder)`);
-      continue;
-    }
-
-    commands.push(command.data.toJSON());
-    console.log(`  ✅ Loaded: /${command.data.name}  (${file})`);
-  } catch (err) {
-    skipped.push(`${file} — ${err.message}`);
-    console.warn(`  ⚠️  Skipped: ${file} — ${err.message}`);
-  }
-}
+const commands = loaded.map(({ command, file }) => {
+  console.log(`  ✅ Loaded: /${command.data.name}  (${file})`);
+  return command.data.toJSON();
+});
 
 if (skipped.length) {
   console.log(`\n⚠️  Skipped ${skipped.length} file(s):`);
-  skipped.forEach(s => console.log(`   • ${s}`));
+  skipped.forEach(entry => console.log(`   • ${entry.file} — ${entry.reason}`));
 }
 
 console.log(`\n📋 Registering ${commands.length} command(s) to ${guildIds.length} guild(s)...\n`);

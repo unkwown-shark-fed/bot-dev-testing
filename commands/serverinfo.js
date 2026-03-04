@@ -1,9 +1,10 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { createCommandBuilder, createEmbed, EMBED_COLORS } = require('../utils/builders');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('serverinfo')
-    .setDescription('Display detailed information about this server'),
+  data: createCommandBuilder({
+    name: 'serverinfo',
+    description: 'Display detailed information about this server',
+  }),
   cooldown: 5,
   async execute(interaction) {
     const guild = interaction.guild;
@@ -20,10 +21,11 @@ module.exports = {
     const bots = guild.members.cache.filter(m => m.user.bot).size;
     const humans = guild.memberCount - bots;
     
-    const embed = new EmbedBuilder()
-      .setTitle(`📊 ${guild.name}`)
-      .setThumbnail(guild.iconURL({ size: 256 }))
-      .setColor(0x5865F2)
+    const embed = createEmbed({
+      title: `📊 ${guild.name}`,
+      thumbnail: guild.iconURL({ size: 256 }),
+      color: EMBED_COLORS.primary,
+    })
       .addFields(
         { name: '🆔 Server ID', value: `\`${guild.id}\``, inline: true },
         { name: '👑 Owner', value: `${owner.user.tag}`, inline: true },

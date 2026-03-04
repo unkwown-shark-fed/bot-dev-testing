@@ -5,6 +5,7 @@ const path   = require('path');
 const logger = require('./logger');
 const config = require('./config.json');
 const db     = require('./db');
+const { loadCommandModules } = require('./utils/command-loader');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -56,24 +57,22 @@ async function logCommandUse({ command, user, guild, channel, args = '', error =
 const commandsPath = path.join(__dirname, 'commands');
 if (!fs.existsSync(commandsPath)) fs.mkdirSync(commandsPath, { recursive: true });
 
-let fileLoadedCount = 0;
+const { loaded: fileCommands, skipped: fileSkipped } = loadCommandModules({
+  commandsPath,
+  clearCache: false,
+  requireExecute: true,
+});
 
-for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
-  try {
-    const cmd = require(path.join(commandsPath, file));
-    if (cmd?.data?.name && typeof cmd.execute === 'function') {
-      client.commands.set(cmd.data.name, cmd);
-      client.stats.commandUsage[cmd.data.name] = 0;
-      fileLoadedCount++;
-    } else {
-      logger.warn(`Command file ${file} is missing data.name or execute`);
-    }
-  } catch (err) {
-    logger.error(`Failed to load command ${file}: ${err.stack || err}`);
-  }
+for (const { command } of fileCommands) {
+  client.commands.set(command.data.name, command);
+  client.stats.commandUsage[command.data.name] = 0;
 }
 
-logger.info(`📁 Loaded ${fileLoadedCount} file-based commands`);
+for (const skipped of fileSkipped) {
+  logger.warn(`Command file ${skipped.file} skipped: ${skipped.reason}`);
+}
+
+logger.info(`📁 Loaded ${fileCommands.length} file-based commands`);
 
 // ── Load dashboard commands from MongoDB ─────────────────────────────────────
 let dbCommandsReady = false;

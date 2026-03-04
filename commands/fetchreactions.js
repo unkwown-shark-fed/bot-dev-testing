@@ -1,25 +1,28 @@
-const { SlashCommandBuilder, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
+const { PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { createCommandBuilder } = require('../utils/builders');
 
 const outputDir = process.env.OUTPUT_DIR || path.join(process.cwd(), 'exports');
 if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('fetchreactions')
-    .setDescription('Fetch all messages with thumbsup/thumbsdown reaction counts from a channel')
-    .addChannelOption(o => 
-      o.setName('channel')
-        .setDescription('Channel to fetch reactions from (defaults to current channel)')
-        .setRequired(false))
-    .addIntegerOption(o =>
-      o.setName('limit')
-        .setDescription('Maximum messages to fetch (0 = unlimited, default: 1000)')
-        .setRequired(false)
-        .setMinValue(0)
-        .setMaxValue(10000))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+  data: createCommandBuilder({
+    name: 'fetchreactions',
+    description: 'Fetch all messages with thumbsup/thumbsdown reaction counts from a channel',
+    defaultMemberPermissions: PermissionFlagsBits.ManageMessages,
+    configure: builder => builder
+      .addChannelOption(o => 
+        o.setName('channel')
+          .setDescription('Channel to fetch reactions from (defaults to current channel)')
+          .setRequired(false))
+      .addIntegerOption(o =>
+        o.setName('limit')
+          .setDescription('Maximum messages to fetch (0 = unlimited, default: 1000)')
+          .setRequired(false)
+          .setMinValue(0)
+          .setMaxValue(10000)),
+  }),
   
   cooldown: 30,
   

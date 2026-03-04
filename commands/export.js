@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
+const { AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { createCommandBuilder } = require('../utils/builders');
 
 const DEFAULT_PER_CHANNEL_LIMIT = parseInt(process.env.DEFAULT_PER_CHANNEL_LIMIT || '0', 10); // 0 = unlimited
 const outputDir = process.env.OUTPUT_DIR || path.join(process.cwd(), 'exports');
@@ -192,13 +193,15 @@ async function buildCsvForMessages(messages) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('export')
-    .setDescription('Export messages in a channel or between two message IDs to a CSV')
-    .addChannelOption(o => o.setName('channel').setDescription('Channel to export (optional, defaults to current channel)').setRequired(false))
-    .addStringOption(o => o.setName('start_id').setDescription('Start message ID (optional, used with end_id)').setRequired(false))
-    .addStringOption(o => o.setName('end_id').setDescription('End message ID (optional, used with start_id)').setRequired(false))
-    .addIntegerOption(o => o.setName('limit').setDescription('Max messages to fetch (0 = unlimited)').setRequired(false)),
+  data: createCommandBuilder({
+    name: 'export',
+    description: 'Export messages in a channel or between two message IDs to a CSV',
+    configure: builder => builder
+      .addChannelOption(o => o.setName('channel').setDescription('Channel to export (optional, defaults to current channel)').setRequired(false))
+      .addStringOption(o => o.setName('start_id').setDescription('Start message ID (optional, used with end_id)').setRequired(false))
+      .addStringOption(o => o.setName('end_id').setDescription('End message ID (optional, used with start_id)').setRequired(false))
+      .addIntegerOption(o => o.setName('limit').setDescription('Max messages to fetch (0 = unlimited)').setRequired(false)),
+  }),
   cooldown: 30,
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
