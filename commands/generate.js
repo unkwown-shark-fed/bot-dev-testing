@@ -1,10 +1,9 @@
 const {
-  SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle
 } = require('discord.js');
+const { createCommandBuilder, createEmbed, EMBED_COLORS } = require('../utils/builders');
 
 /* ================= EDITABLE CONFIG ================= */
 
@@ -90,12 +89,12 @@ function buildTable() {
 }
 
 function buildEmbed() {
-  return new EmbedBuilder()
-    .setTitle('BATTLEGROUNDS MOBILE INDIA Community Custom Matches')
-    .setColor(0x00c2ff)
-    .setDescription(EMBED_MESSAGE.trim() + '\n\n```' + buildTable() + '```')
-    .setFooter({ text: 'Tap the buttons below, then tap on "Interested" to get notifications.' })
-    .setTimestamp();
+  return createEmbed({
+    title: 'BATTLEGROUNDS MOBILE INDIA Community Custom Matches',
+    color: EMBED_COLORS.info,
+    description: EMBED_MESSAGE.trim() + '\n\n```' + buildTable() + '```',
+    footer: { text: 'Tap the buttons below, then tap on "Interested" to get notifications.' },
+  });
 }
 
 function buildButtonsFromCommand(interaction) {
@@ -128,23 +127,27 @@ function buildButtonsFromCommand(interaction) {
   return rows;
 }
 
-const cmdBuilder = new SlashCommandBuilder()
-  .setName('generate')
-  .setDescription('Post the Community Custom Matches schedule embed with optional event buttons');
+const cmdBuilder = createCommandBuilder({
+  name: 'generate',
+  description: 'Post the Community Custom Matches schedule embed with optional event buttons',
+  configure: builder => {
+    for (let i = 1; i <= 12; i++) {
+      builder
+        .addStringOption(o =>
+          o.setName(`button${i}_label`)
+            .setDescription(`Button ${i} label`)
+            .setRequired(false)
+        )
+        .addStringOption(o =>
+          o.setName(`button${i}_url`)
+            .setDescription(`Button ${i} URL`)
+            .setRequired(false)
+        );
+    }
 
-for (let i = 1; i <= 12; i++) {
-  cmdBuilder
-    .addStringOption(o =>
-      o.setName(`button${i}_label`)
-        .setDescription(`Button ${i} label`)
-        .setRequired(false)
-    )
-    .addStringOption(o =>
-      o.setName(`button${i}_url`)
-        .setDescription(`Button ${i} URL`)
-        .setRequired(false)
-    );
-}
+    return builder;
+  },
+});
 
 module.exports = {
   data: cmdBuilder,

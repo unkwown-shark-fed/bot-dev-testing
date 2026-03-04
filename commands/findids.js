@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
+const { AttachmentBuilder } = require('discord.js');
 const { stringify } = require('csv-stringify/sync');
+const { createCommandBuilder } = require('../utils/builders');
 
 function splitInputs(input) {
   return String(input || '')
@@ -42,10 +43,11 @@ async function fetchMembersWithTimeout(guild, query, limit = 1000, ms = 5000) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('findids')
-    .setDescription('Find user IDs for a list of usernames (username or username#discriminator)')
-    .addStringOption(o => o.setName('users').setDescription('Usernames (newline/comma separated)').setRequired(true)),
+  data: createCommandBuilder({
+    name: 'findids',
+    description: 'Find user IDs for a list of usernames (username or username#discriminator)',
+    configure: builder => builder.addStringOption(o => o.setName('users').setDescription('Usernames (newline/comma separated)').setRequired(true)),
+  }),
   cooldown: 10,
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });

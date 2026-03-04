@@ -618,7 +618,83 @@ ${ind}  }).catch(() => {});
 ${ind}}, 10 * 60 * 1000);`;
 }
 
-function buildUtilAction(a, ind) {
+function buildModalFormActionForButton(a, ind = '        ', ctx = 'i') {
+  const buttonLabel = a.buttonLabel || '📋 Open Form';
+  const modalTitle  = a.modalTitle || 'Fill Out Form';
+  const responseCh  = a.responseChannel || '';
+  const useEmbed    = a.responseEmbed !== false;
+  const fields      = (a.modalFields || []).filter(f => f.label).slice(0, 5);
+  const btnId       = a.buttonCustomId || `btn_${buttonLabel.replace(/\s+/g, '_').toLowerCase()}`;
+  const modalId     = `${btnId}_submit`;
+
+  const fieldDefs = fields.map((f, idx) => {
+    const style = f.style === 'paragraph' ? 'TextInputStyle.Paragraph' : 'TextInputStyle.Short';
+    return `${ind}const field${idx} = new TextInputBuilder()
+${ind}  .setCustomId(${j(`field_${idx}`)})
+${ind}  .setLabel(${j(f.label)})
+${ind}  .setPlaceholder(${j(f.placeholder || '')})
+${ind}  .setStyle(${style})
+${ind}  .setRequired(${!!f.required});`;
+  }).join('\n');
+
+  const addRows = fields.map((_, idx) => `${ind}modal.addComponents(new ActionRowBuilder().addComponents(field${idx}));`).join('\n');
+
+  const targetChExpr = responseCh
+    ? `${ctx}.guild?.channels?.cache?.find(c => c.name === ${j(responseCh)} || c.id === ${j(responseCh)})`
+    : `${ctx}.channel`;
+
+  const fieldSendText = fields
+    .map((f, idx) => `**${f.label}:** \${submitted.fields.getTextInputValue(${j(`field_${idx}`)})}`)
+    .join('\\n');
+
+  const fieldSendEmbed = fields
+    .map((f, idx) => `          { name: ${j(f.label)}, value: submitted.fields.getTextInputValue(${j(`field_${idx}`)}), inline: true }`)
+    .join(',\n');
+
+  const sendSubmission = useEmbed
+    ? `${ind}const resEmbed = new EmbedBuilder()
+${ind}  .setTitle('📋 New Form Submission')
+${ind}  .addFields(
+${fieldSendEmbed},
+${ind}    { name: 'Submitted By', value: \`\${submitted.user.tag} (<@\${submitted.user.id}>)\`, inline: false },
+${ind}    { name: 'Submitted At', value: \`<t:\${Math.floor(Date.now()/1000)}:F>\`, inline: false }
+${ind}  )
+${ind}  .setColor('#2dd4a0')
+${ind}  .setThumbnail(submitted.user.displayAvatarURL());
+${ind}await targetCh.send({ embeds: [resEmbed] });`
+    : `${ind}await targetCh.send(\`📋 **New Submission** from \${submitted.user.tag}\n${fieldSendText}\`);`;
+
+  return `${ind}// Modal form for button interactions (safe pattern for Discord)
+${ind}if (${ctx}.customId !== ${j(btnId)}) return;
+${ind}
+${ind}const modal = new ModalBuilder()
+${ind}  .setCustomId(${j(modalId)})
+${ind}  .setTitle(${j(modalTitle)});
+${fieldDefs}
+${addRows}
+${ind}
+${ind}await ${ctx}.showModal(modal);
+${ind}
+${ind}const submitted = await ${ctx}.awaitModalSubmit({
+${ind}  filter: m => m.customId === ${j(modalId)} && m.user.id === ${ctx}.user.id,
+${ind}  time: 2 * 60 * 1000
+${ind}}).catch(() => null);
+${ind}
+${ind}if (!submitted) {
+${ind}  return;
+${ind}}
+${ind}
+${ind}await submitted.deferReply({ ephemeral: true });
+${ind}const targetCh = ${targetChExpr};
+${ind}if (!targetCh?.isTextBased?.()) {
+${ind}  await submitted.editReply({ content: '⚠️ Response channel not found or not a text channel.' });
+${ind}  return;
+${ind}}
+${sendSubmission}
+${ind}await submitted.editReply({ content: '✅ Form submitted successfully!' });`;
+}
+
+function buildUtilAction(a, ind, ctx = 'interaction') {
   const jv = v => JSON.stringify(String(v ?? ''));
   const jb = v => v ? 'true' : 'false';
   // c() builds a code line: joins args, applies indent
@@ -649,7 +725,7 @@ function buildUtilAction(a, ind) {
         c('  await interaction.editReply(`\u2705 Deleted **${_dc}** message(s).`);'),
         c("} catch (e) { await interaction.editReply('\u274c Error: ' + e.message); }"),
       );
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'kick_member': {
@@ -668,7 +744,7 @@ function buildUtilAction(a, ind) {
         c('  await interaction.reply({ content: `\u2705 Kicked **${_kt.tag}**.`, ephemeral: true });'),
         c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
       );
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'ban_member': {
@@ -687,7 +763,7 @@ function buildUtilAction(a, ind) {
         c('  await interaction.reply({ content: `\u2705 Banned **${_bt.tag}**.`, ephemeral: true });'),
         c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
       );
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'timeout_member': {
@@ -707,7 +783,7 @@ function buildUtilAction(a, ind) {
         c('  await interaction.reply({ content: `\u2705 Timed out **${_tot.tag}** for ', String(dur), ' minute(s).`, ephemeral: true });'),
         c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
       );
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'add_role': {
@@ -726,7 +802,7 @@ function buildUtilAction(a, ind) {
         c('  await interaction.reply({ content: `\u2705 Added **${_arr.name}** to **${_art.tag}**.`, ephemeral: true });'),
         c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
       ];
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'remove_role': {
@@ -745,7 +821,7 @@ function buildUtilAction(a, ind) {
         c('  await interaction.reply({ content: `\u2705 Removed **${_rrr.name}** from **${_rrt.tag}**.`, ephemeral: true });'),
         c("} catch (e) { await interaction.reply({ content: '\u274c ' + e.message, ephemeral: true }); }"),
       ];
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'user_info': {
@@ -772,7 +848,7 @@ function buildUtilAction(a, ind) {
         c('}'),
         c('await interaction.reply({ embeds: [_uie], ephemeral: ', eph, ' });'),
       ];
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'server_info': {
@@ -797,7 +873,7 @@ function buildUtilAction(a, ind) {
         c('  );'),
         c('await interaction.reply({ embeds: [_sie], ephemeral: ', eph, ' });'),
       ];
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'list_role_members': {
@@ -818,7 +894,7 @@ function buildUtilAction(a, ind) {
         c('for (let _li = 1; _li < Math.min(_lrc.length, 4); _li++)'),
         c("  await interaction.followUp({ embeds: [new _LRE().setDescription(_lrc[_li].join('\\n')).setColor(_lrr.hexColor || '#5865F2')], ephemeral: ", eph, ' });'),
       ];
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'dm_user': {
@@ -833,7 +909,7 @@ function buildUtilAction(a, ind) {
         c('  await interaction.reply({ content: `\u2705 DM sent to **${_dmt.tag}**.`, ephemeral: true });'),
         c("} catch (e) { await interaction.reply({ content: '\u274c Could not DM (DMs may be disabled).', ephemeral: true }); }"),
       ];
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     case 'repost_messages': {
@@ -861,7 +937,7 @@ function buildUtilAction(a, ind) {
         c('}'),
         c('await interaction.editReply(`\u2705 Reposted ${_rpc}/${_rpa.length} messages to <#${_rpt.id}>.`);'),
       ];
-      return out.join('\n');
+      return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
     default: return '';
@@ -869,22 +945,25 @@ function buildUtilAction(a, ind) {
 }
 
 
-function buildActions(actions, ind = '    ') {
+function buildActions(actions, ind = '    ', ctx = 'interaction') {
   return actions.map(a => {
-    if (a.type === 'modal_form') return buildModalFormAction(a, ind);
+    if (a.type === 'modal_form') {
+      if (ctx === 'i') return buildModalFormActionForButton(a, ind, ctx);
+      return buildModalFormAction(a, ind);
+    }
     // Utility actions
     const utilTypes = ['purge_messages','kick_member','ban_member','timeout_member','add_role','remove_role','user_info','server_info','list_role_members','dm_user','repost_messages'];
-    if (utilTypes.includes(a.type)) return buildUtilAction(a, ind);
+    if (utilTypes.includes(a.type)) return buildUtilAction(a, ind, ctx);
     const eph = a.ephemeral ? ', ephemeral: true' : '';
     switch (a.type) {
-      case 'reply_text':   return `${ind}await interaction.reply({ content: ${j(a.content || '')}${eph} });`;
-      case 'reply_embed':  return embedBlock(a, ind) + `\n${ind}await interaction.reply({ embeds: [embed]${eph} });`;
-      case 'followup_text': return `${ind}await interaction.followUp({ content: ${j(a.content || '')}${eph} });`;
-      case 'followup_embed': return embedBlock(a, ind) + `\n${ind}await interaction.followUp({ embeds: [embed]${eph} });`;
+      case 'reply_text':   return `${ind}await ${ctx}.reply({ content: ${j(a.content || '')}${eph} });`;
+      case 'reply_embed':  return embedBlock(a, ind) + `\n${ind}await ${ctx}.reply({ embeds: [embed]${eph} });`;
+      case 'followup_text': return `${ind}await ${ctx}.followUp({ content: ${j(a.content || '')}${eph} });`;
+      case 'followup_embed': return embedBlock(a, ind) + `\n${ind}await ${ctx}.followUp({ embeds: [embed]${eph} });`;
       case 'send_to_channel':
-        return `${ind}{\n${ind}  const _ch = interaction.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n${ind}  if (_ch?.isTextBased?.()) await _ch.send({ content: ${j(a.content||'')} });\n${ind}}`;
+        return `${ind}{\n${ind}  const _ch = ${ctx}.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n${ind}  if (_ch?.isTextBased?.()) await _ch.send({ content: ${j(a.content||'')} });\n${ind}}`;
       case 'send_embed_to_channel':
-        return `${ind}{\n${embedBlock(a, ind+'  ')}\n${ind}  const _ch = interaction.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n${ind}  if (_ch?.isTextBased?.()) await _ch.send({ embeds: [embed] });\n${ind}}`;
+        return `${ind}{\n${embedBlock(a, ind+'  ')}\n${ind}  const _ch = ${ctx}.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n${ind}  if (_ch?.isTextBased?.()) await _ch.send({ embeds: [embed] });\n${ind}}`;
       default: return '';
     }
   }).filter(Boolean).join('\n\n');
@@ -954,7 +1033,8 @@ ${cond ? cond + '\n\n' : ''}${act}
 
 function genButton(name, desc, trigger, conditions, actions) {
   const allActs = [...actions, ...(trigger.buttons || []).flatMap(b => b.actions || [])];
-  const imp  = (needsEmbed(allActs) ? 'EmbedBuilder, ' : '') + 'SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle';
+  const hasModal = allActs.some(a => a.type === 'modal_form');
+  const imp  = (needsEmbed(allActs) ? 'EmbedBuilder, ' : '') + 'SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle' + (hasModal ? ', ModalBuilder, TextInputBuilder, TextInputStyle' : '');
   const cool = parseInt(trigger.cooldown, 10) || 3;
   const tms  = (parseInt(trigger.timeout, 10) || 60) * 1000;
   const cond = buildConditions(conditions);
@@ -964,7 +1044,7 @@ function genButton(name, desc, trigger, conditions, actions) {
   }).join(',\n');
   const cases = (trigger.buttons || []).map(b => {
     const bActs = b.actions?.length ? b.actions : actions;
-    return `      if (i.customId === ${j(b.customId || `btn_${b.label}`)}) {\n${buildActions(bActs, '        ')}\n      }`;
+    return `      if (i.customId === ${j(b.customId || `btn_${b.label}`)}) {\n${buildActions(bActs, '        ', 'i')}\n      }`;
   }).join('\n');
   return `const { ${imp} } = require('discord.js');
 
@@ -984,7 +1064,6 @@ ${btnDefs}
       const filter = i => i.user.id === interaction.user.id;
       const col = interaction.channel.createMessageComponentCollector({ filter, time: ${tms} });
       col.on('collect', async i => {
-        await i.deferUpdate();
 ${cases}
       });
       col.on('end', (_, reason) => {
