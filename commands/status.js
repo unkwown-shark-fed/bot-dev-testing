@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits } = require('discord.js');
+const { createCommandBuilder, createEmbed, EMBED_COLORS } = require('../utils/builders');
 const os = require('os');
 
 function formatUptime(ms) {
@@ -14,9 +15,10 @@ function formatUptime(ms) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('status')
-    .setDescription('Show detailed bot health, uptime, and statistics (admin only)'),
+  data: createCommandBuilder({
+    name: 'status',
+    description: 'Show detailed bot health, uptime, and statistics (admin only)',
+  }),
   cooldown: 3,
   async execute(interaction) {
     const ownerId = process.env.BOT_OWNER_ID || '';
@@ -46,10 +48,10 @@ module.exports = {
       .map(([name, count]) => `\`/${name}\`: ${count}`)
       .join('\n') || 'No commands executed yet';
 
-    const embed = new EmbedBuilder()
-      .setTitle('📊 Bot Status & Statistics')
-      .setColor(0x00AE86)
-      .setTimestamp();
+    const embed = createEmbed({
+      title: '📊 Bot Status & Statistics',
+      color: EMBED_COLORS.info,
+    });
 
     // System info
     embed.addFields({

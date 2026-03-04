@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
+const { AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { createCommandBuilder } = require('../utils/builders');
 
 const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(process.cwd(), 'exports');
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -101,13 +102,15 @@ async function streamMessagesForward(channel, startAfterId = null, limit = 0, on
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('exportinvites')
-    .setDescription('Export unique users who posted a keyword to CSV')
-    .addChannelOption(o => o.setName('channel').setDescription('Channel to scan (defaults to current)').setRequired(false))
-    .addStringOption(o => o.setName('keyword').setDescription('Keyword to search (default: !invites)').setRequired(false))
-    .addStringOption(o => o.setName('after').setDescription('Start scanning AFTER this message link or ID').setRequired(false))
-    .addIntegerOption(o => o.setName('limit').setDescription('Max messages to scan (0 = unlimited)').setRequired(false))
+  data: createCommandBuilder({
+    name: 'exportinvites',
+    description: 'Export unique users who posted a keyword to CSV',
+    configure: builder => builder
+      .addChannelOption(o => o.setName('channel').setDescription('Channel to scan (defaults to current)').setRequired(false))
+      .addStringOption(o => o.setName('keyword').setDescription('Keyword to search (default: !invites)').setRequired(false))
+      .addStringOption(o => o.setName('after').setDescription('Start scanning AFTER this message link or ID').setRequired(false))
+      .addIntegerOption(o => o.setName('limit').setDescription('Max messages to scan (0 = unlimited)').setRequired(false)),
+  })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
   cooldown: 15,
   async execute(interaction) {

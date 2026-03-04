@@ -1,20 +1,21 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { createCommandBuilder, createEmbed, EMBED_COLORS } = require('../utils/builders');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('userinfo')
-    .setDescription('Display detailed information about a user')
-    .addUserOption(o => o.setName('user').setDescription('User to get info about (defaults to you)').setRequired(false)),
+  data: createCommandBuilder({
+    name: 'userinfo',
+    description: 'Display detailed information about a user',
+    configure: builder => builder.addUserOption(o => o.setName('user').setDescription('User to get info about (defaults to you)').setRequired(false)),
+  }),
   cooldown: 5,
   async execute(interaction) {
     const user = interaction.options.getUser('user') || interaction.user;
     const member = interaction.guild ? await interaction.guild.members.fetch(user.id).catch(() => null) : null;
 
-    const embed = new EmbedBuilder()
-      .setTitle(`User Information: ${user.tag}`)
-      .setThumbnail(user.displayAvatarURL({ size: 256 }))
-      .setColor(member?.displayHexColor || 0x5865F2)
-      .setTimestamp();
+    const embed = createEmbed({
+      title: `User Information: ${user.tag}`,
+      thumbnail: user.displayAvatarURL({ size: 256 }),
+      color: member?.displayHexColor || EMBED_COLORS.primary,
+    });
 
     // Basic info
     embed.addFields(

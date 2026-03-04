@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
+const { AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
 const { stringify } = require('csv-stringify/sync');
+const { createCommandBuilder } = require('../utils/builders');
 
 function parseMessageLinkOrId(input) {
   input = input.trim();
@@ -49,19 +50,21 @@ function excelSafeId(id) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('exportmessages')
-    .setDescription('Export multiple messages to CSV (provide message links or IDs)')
-    .addStringOption(opt =>
-      opt.setName('messages')
-        .setDescription('Message links or IDs (space/newline separated)')
-        .setRequired(false)
-    )
-    .addStringOption(opt =>
-      opt.setName('message')
-        .setDescription('(legacy) Message link or ID or multiple links/IDs')
-        .setRequired(false)
-    ),
+  data: createCommandBuilder({
+    name: 'exportmessages',
+    description: 'Export multiple messages to CSV (provide message links or IDs)',
+    configure: builder => builder
+      .addStringOption(opt =>
+        opt.setName('messages')
+          .setDescription('Message links or IDs (space/newline separated)')
+          .setRequired(false)
+      )
+      .addStringOption(opt =>
+        opt.setName('message')
+          .setDescription('(legacy) Message link or ID or multiple links/IDs')
+          .setRequired(false)
+      ),
+  }),
 
   cooldown: 10,
 

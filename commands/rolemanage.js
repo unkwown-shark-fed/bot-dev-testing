@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
+const { AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
+const { createCommandBuilder, createEmbed, EMBED_COLORS } = require('../utils/builders');
 const { stringify } = require('csv-stringify/sync');
 
 function parseUsersList(input) {
@@ -13,9 +14,10 @@ function parseUsersList(input) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('rolemanage')
-    .setDescription('Add or remove a role for a list of users')
+  data: createCommandBuilder({
+    name: 'rolemanage',
+    description: 'Add or remove a role for a list of users',
+    configure: builder => builder
     .addSubcommand(sc =>
       sc.setName('add')
         .setDescription('Add a role to users')
@@ -28,6 +30,7 @@ module.exports = {
         .addRoleOption(o => o.setName('role').setDescription('Target role').setRequired(true))
         .addStringOption(o => o.setName('users').setDescription('User IDs or mentions separated by spaces/newlines').setRequired(true))
         .addIntegerOption(o => o.setName('limit').setDescription('Process only first N users (optional)'))),
+  }),
   cooldown: 15,
   async execute(interaction, client, logger) {
     const sub = interaction.options.getSubcommand();
@@ -85,11 +88,11 @@ module.exports = {
     const successCount = results.filter(r => r.status === (sub === 'add' ? 'added' : 'removed')).length;
     const failed = results.length - successCount;
 
-    const embed = new EmbedBuilder()
-      .setTitle(`Role ${sub === 'add' ? 'Add' : 'Remove'} — ${role.name}`)
-      .setDescription(`Processed ${results.length} users — ${successCount} successful, ${failed} failed`)
-      .setColor(successCount > 0 ? 0x00FF00 : 0xFF0000)
-      .setTimestamp();
+    const embed = createEmbed({
+      title: `Role ${sub === 'add' ? 'Add' : 'Remove'} — ${role.name}`,
+      description: `Processed ${results.length} users — ${successCount} successful, ${failed} failed`,
+      color: successCount > 0 ? EMBED_COLORS.success : EMBED_COLORS.danger,
+    });
 
     const csv = stringify(results, { header: true, columns: ['userId', 'status', 'message'] });
     const attachment = new AttachmentBuilder(Buffer.from(csv), { name: `rolemanage-${Date.now()}.csv` });
