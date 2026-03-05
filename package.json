@@ -12,7 +12,7 @@
     "dev": "NODE_ENV=development node index.js",
     "logs": "tail -f logs/bot.log",
     "errors": "tail -f logs/error.log",
-    "dashboard": "node dashboard.js",
+    "dashboard": "node dashboard-premium.js",
     "dashboard-premium": "node dashboard-premium.js"
   },
   "keywords": [

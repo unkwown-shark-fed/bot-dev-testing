@@ -38,12 +38,15 @@ client.stats = {
 // Sends a log entry to the dashboard which forwards it to your configured
 // log channel as a Discord embed. Non-fatal — never crashes the bot.
 const DASHBOARD_URL  = process.env.DASHBOARD_URL  || 'http://localhost:3000';
-const DASHBOARD_PASS = process.env.DASHBOARD_PASSWORD || 'admin123';
+const DASHBOARD_PASS = process.env.DASHBOARD_PASSWORD || '';
 
 async function logCommandUse({ command, user, guild, channel, args = '', error = null }) {
+  if (!DASHBOARD_PASS) return;
+
   try {
     await fetch(`${DASHBOARD_URL}/api/log`, {
       method:  'POST',
+      signal: AbortSignal.timeout(3000),
       headers: {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${DASHBOARD_PASS}`,
