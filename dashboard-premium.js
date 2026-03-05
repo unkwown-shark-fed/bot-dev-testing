@@ -26,13 +26,18 @@ const db           = require('./db');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PORT      = parseInt(process.env.WEB_DASHBOARD_PORT || '3000', 10);
-const PASSWORD  = process.env.DASHBOARD_PASSWORD || 'admin123';
+const PASSWORD  = process.env.DASHBOARD_PASSWORD || '';
 const ROOT      = __dirname;
 const CMD_DIR   = path.join(ROOT, 'commands');
 const LOG_DIR   = path.join(ROOT, 'logs');
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+if (!PASSWORD) {
+  console.error('❌ DASHBOARD_PASSWORD is required in environment. Refusing to start dashboard.');
+  process.exit(1);
+}
 
 // ── Schedule Model ─────────────────────────────────────────────────────────────
 function getScheduleModel() {
@@ -332,6 +337,14 @@ app.get('/api/commands/:name', auth, async (req, res) => {
     const cmd = await db.getCommand(req.params.name);
     if (!cmd) return res.status(404).json({ error: 'Not found' });
     res.json({ command: cmd });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/commands/:name/content', auth, async (req, res) => {
+  try {
+    const cmd = await db.getCommand(req.params.name);
+    if (!cmd) return res.status(404).json({ error: 'Not found' });
+    res.json({ content: cmd.code || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

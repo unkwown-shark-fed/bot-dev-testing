@@ -469,7 +469,7 @@ input[type=color] { cursor: pointer; }
 .ep-fields { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
 .ep-field { background:var(--bg3); border-radius:6px; padding:6px 10px; min-width:120px; flex:1; }
 .ep-field-name  { font-size:11px; font-weight:700; color:var(--t1); margin-bottom:2px; }
-.ep-field-value { font-size:12px; color:var(--t2); }
+.ep-field-value { font-size:12px; color:var(--t2); white-space: pre-wrap; }
 .ep-image { width:100%; border-radius:6px; margin-bottom:10px; max-height:200px; object-fit:cover; }
 .ep-thumb { float:right; width:70px; height:70px; border-radius:6px; object-fit:cover; margin-left:12px; }
 .ep-footer { font-size:11px; color:var(--t3); display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
@@ -2409,9 +2409,23 @@ function renderEmbedFields() {
       <div class="frow"><div class="flabel">Name</div>
         <input class="finput" value="${esc(f.name)}" placeholder="Field name" oninput="updEbField(${f.id},'name',this.value)"></div>
       <div class="frow"><div class="flabel">Value</div>
-        <input class="finput" value="${esc(f.value)}" placeholder="Field value" oninput="updEbField(${f.id},'value',this.value)"></div>
+        <textarea class="ftextarea" placeholder="Field value (new lines supported)" oninput="updEbField(${f.id},'value',this.value)">${esc(f.value)}</textarea></div>
       <label class="crow"><input type="checkbox" ${f.inline?'checked':''} onchange="updEbField(${f.id},'inline',this.checked)"><label>Inline</label></label>
     </div>`).join('');
+}
+
+function normalizeEmbedButtons() {
+  return ebBtns.slice(0, 5).map((b, idx) => {
+    const style = b.style || 'Link';
+    const label = (b.label || 'Button').trim();
+    const safeId = (b.customId || '').trim() || `btn_${Date.now()}_${idx}`;
+    const safeUrl = (b.url || '').trim();
+    return {
+      style,
+      label,
+      ...(style === 'Link' ? { url: safeUrl || 'https://discord.com' } : { customId: safeId })
+    };
+  });
 }
 
 function getEmbedData() {
@@ -2470,9 +2484,12 @@ function liveEmbed() {
       ${imageHtml}
       ${footerHtml}
     </div>
-    ${ebBtns.length ? `<div class="ep-btns">${ebBtns.map(b => {
+    ${ebBtns.length ? `<div class="ep-btns">${normalizeEmbedButtons().map(b => {
       const styleMap = { Primary:'ep-btn-primary', Secondary:'ep-btn-secondary', Success:'ep-btn-success', Danger:'ep-btn-danger', Link:'ep-btn-link' };
-      return `<a class="ep-btn ${styleMap[b.style]||'ep-btn-primary'}" href="${esc(b.url||'#')}" target="_blank" rel="noopener">${esc(b.label||'Button')}</a>`;
+      if (b.style === 'Link') {
+        return `<a class="ep-btn ${styleMap[b.style]||'ep-btn-primary'}" href="${esc(b.url||'#')}" target="_blank" rel="noopener">${esc(b.label||'Button')}</a>`;
+      }
+      return `<button type="button" class="ep-btn ${styleMap[b.style]||'ep-btn-primary'}" title="customId: ${esc(b.customId || '')}" onclick="return false;">${esc(b.label||'Button')}</button>`;
     }).join('')}</div>` : ''}`;
 }
 
@@ -2482,7 +2499,10 @@ async function sendEmbed() {
   const e = getEmbedData();
   if (!e.title && !e.description) { toast('Add a title or description', 'err'); return; }
   try {
-    const d = await api('/api/embed/send', { method:'POST', body: JSON.stringify({ channel, embed: e, buttons: ebBtns, content: e.content }) }).then(r => r.json());
+    const d = await api('/api/embed/send', {
+      method:'POST',
+      body: JSON.stringify({ channel, embed: e, buttons: normalizeEmbedButtons(), content: e.content })
+    }).then(r => r.json());
     toast(d.success ? `✅ Embed sent to #${channel}!` : (d.error || 'Failed'), d.success ? 'ok' : 'err');
   } catch(ex) { toast('Error: ' + ex.message, 'err'); }
 }
@@ -2502,11 +2522,11 @@ function copyEmbedJSON() {
       ...(e.image && { image: { url: e.image } }),
       ...(e.fields.length && { fields: e.fields.map(f => ({ name:f.name, value:f.value, inline:f.inline })) })
     }],
-    ...(ebBtns.length && { components: [{ type: 1, components: ebBtns.map(b => ({
+    ...(ebBtns.length && { components: [{ type: 1, components: normalizeEmbedButtons().map(b => ({
       type: 2,
       style: { Link:5, Primary:1, Secondary:2, Success:3, Danger:4 }[b.style] || 5,
       label: b.label,
-      url: b.url
+      ...(b.style === 'Link' ? { url: b.url } : { custom_id: b.customId })
     })) }] })
   };
   navigator.clipboard.writeText(JSON.stringify(djsObj, null, 2));
@@ -2555,7 +2575,9 @@ function renderEmbedBtns() {
           ${['Link','Primary','Secondary','Success','Danger'].map(s=>`<option value="${s}"${b.style===s?' selected':''}>${s}</option>`).join('')}
         </select></div>
       <div class="frow"><div class="flabel">URL</div>
-        <input class="finput" value="${esc(b.url)}" placeholder="https://example.com" oninput="updEbBtn(${b.id},'url',this.value)"></div>
+        <input class="finput" value="${esc(b.url)}" placeholder="https://example.com" oninput="updEbBtn(${b.id},'url',this.value)" ${b.style !== 'Link' ? 'disabled' : ''}></div>
+      <div class="frow"><div class="flabel">Custom ID</div>
+        <input class="finput" value="${esc(b.customId||'')}" placeholder="btn_action" oninput="updEbBtn(${b.id},'customId',this.value)" ${b.style === 'Link' ? 'disabled' : ''}></div>
     </div>`).join('');
 }
 
