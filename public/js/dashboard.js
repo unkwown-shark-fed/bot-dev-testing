@@ -99,7 +99,7 @@ async function updateStats() {
   try {
     const res = await fetch('/api/stats', { headers: { 'Authorization': `Bearer ${token}` }});
     const data = await res.json();
-    document.getElementById('statsCommands').textContent = data.commands;
+    document.getElementById('statsCommands').textContent = data.totalCommands ?? data.commands ?? 0;
     document.getElementById('statsGuilds').textContent = data.guilds;
     document.getElementById('statsVersion').textContent = data.version;
   } catch (err) {
