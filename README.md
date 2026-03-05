@@ -80,6 +80,7 @@ npm start
 |---------|-------------|----------|
 | `/findids` | Find user IDs by searching usernames | 10s |
 | `/listusers` | Paginated list of members with a role | N/A |
+| `/reactafter` | React to messages after a starting message link | 10s |
 
 ### 🎮 Gaming Commands
 | Command | Description | Cooldown |
