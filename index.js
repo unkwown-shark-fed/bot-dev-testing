@@ -1,6 +1,5 @@
 const { Client, GatewayIntentBits, Partials, Collection, PermissionFlagsBits, ActivityType } = require('discord.js');
 require('dotenv').config();
-const fs     = require('fs');
 const path   = require('path');
 const logger = require('./logger');
 const config = require('./config.json');
@@ -56,26 +55,35 @@ async function logCommandUse({ command, user, guild, channel, args = '', error =
   } catch (_) {} // never crash the bot over logging
 }
 
-// ── Load commands from /commands folder ───────────────────────────────────────
+// ── Command source mode ────────────────────────────────────────────────────────
 const commandsPath = path.join(__dirname, 'commands');
-if (!fs.existsSync(commandsPath)) fs.mkdirSync(commandsPath, { recursive: true });
+const dbOnlyMode = String(process.env.DB_ONLY_COMMANDS || '').toLowerCase() === 'true';
 
-const { loaded: fileCommands, skipped: fileSkipped } = loadCommandModules({
-  commandsPath,
-  clearCache: false,
-  requireExecute: true,
-});
+let fileCommands = [];
+let fileSkipped = [];
 
-for (const { command } of fileCommands) {
-  client.commands.set(command.data.name, command);
-  client.stats.commandUsage[command.data.name] = 0;
+if (!dbOnlyMode) {
+  const fileResult = loadCommandModules({
+    commandsPath,
+    clearCache: false,
+    requireExecute: true,
+  });
+  fileCommands = fileResult.loaded;
+  fileSkipped = fileResult.skipped;
+
+  for (const { command } of fileCommands) {
+    client.commands.set(command.data.name, command);
+    client.stats.commandUsage[command.data.name] = 0;
+  }
+
+  for (const skipped of fileSkipped) {
+    logger.warn(`Command file ${skipped.file} skipped: ${skipped.reason}`);
+  }
+
+  logger.info(`📁 Loaded ${fileCommands.length} file-based commands`);
+} else {
+  logger.info('🧠 DB_ONLY_COMMANDS=true — skipping /commands folder and loading only MongoDB dashboard commands');
 }
-
-for (const skipped of fileSkipped) {
-  logger.warn(`Command file ${skipped.file} skipped: ${skipped.reason}`);
-}
-
-logger.info(`📁 Loaded ${fileCommands.length} file-based commands`);
 
 // ── Load dashboard commands from MongoDB ─────────────────────────────────────
 let dbCommandsReady = false;
@@ -112,7 +120,7 @@ const dbLoadPromise = (async () => {
     dbCommandsReady = true;
     return dbCount;
   } catch (e) {
-    logger.error(`MongoDB load failed: ${e.message} — continuing with file commands only`);
+    logger.error(`MongoDB load failed: ${e.message} — continuing with ${dbOnlyMode ? 'no' : 'file'} commands only`);
     dbCommandsReady = true;
     return 0;
   }

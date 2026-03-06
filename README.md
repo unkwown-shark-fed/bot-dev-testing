@@ -112,6 +112,8 @@ npm start
 | `OUTPUT_DIR` | Export files directory | ./exports |
 | `DEFAULT_PER_CHANNEL_LIMIT` | Max messages per export | 0 (unlimited) |
 | `REPOST_MAX_SEND` | Max messages /repost can send | 200 |
+| `DB_ONLY_COMMANDS` | If `true`, bot + deploy scripts load commands only from MongoDB dashboard records | false |
+| `WRITE_COMMAND_FILES` | If `true`, dashboard also writes uploaded/generated commands into `/commands` files | false |
 
 ### Optional - Logging
 | Variable | Description | Default |
@@ -202,6 +204,8 @@ Track command usage, error rates, and bot performance in real-time with `/status
 # Re-deploy commands
 npm run deploy
 ```
+
+If you're using MongoDB-only mode (`DB_ONLY_COMMANDS=true`), upload/modify commands from the dashboard and then run `npm run deploy` to push DB commands to Discord.
 
 ### Permission Errors
 - Check bot role position (must be above managed roles)

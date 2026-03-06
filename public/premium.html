@@ -223,6 +223,18 @@ input[type=color] { cursor: pointer; }
 }
 .mfield-card:last-child { margin-bottom: 0; }
 
+.upload-box {
+  border: 1px solid var(--line2);
+  background: var(--bg1);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.upload-box .ftextarea {
+  min-height: 180px;
+}
+
 /* ── CANVAS (middle) ────────────────────────────────────────────────────── */
 .canvas-wrap {
   flex: 1; display: flex; flex-direction: column; background: var(--bg0); overflow: hidden;
@@ -768,7 +780,18 @@ input[type=color] { cursor: pointer; }
       <div class="pg" id="pg-commands" style="flex-direction:column;">
         <div class="pg-scroll">
           <h1 class="pg-title">Commands</h1>
-          <p class="pg-sub">All .js files in your /commands directory</p>
+          <p class="pg-sub">MongoDB command registry + direct code upload</p>
+          <div class="upload-box">
+            <div class="flabel">Upload command code directly to MongoDB + Discord</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <input class="finput" id="upload-name" placeholder="command-name">
+              <input class="finput" id="upload-desc" placeholder="Command description (optional)">
+            </div>
+            <textarea class="ftextarea" id="upload-code" placeholder="Paste full command module code here (module.exports = { data, execute })"></textarea>
+            <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+              <button class="sbtn pri" onclick="uploadCommandCode()">⬆ Upload &amp; Register</button>
+            </div>
+          </div>
           <div class="cmd-grid" id="cmd-grid"><p style="color:var(--t2)">Loading…</p></div>
         </div>
       </div>
@@ -1290,6 +1313,36 @@ async function loadCmds() {
     if (!commands.length) { g.innerHTML = '<p style="color:var(--t2)">No commands found. Use <strong>Sync Files → DB</strong> first.</p>'; return; }
     g.innerHTML = commands.map(c => cmdCard(c)).join('');
   } catch(e) { g.innerHTML = `<p style="color:var(--red)">Error: ${esc(e.message)}</p>`; }
+}
+
+async function uploadCommandCode() {
+  const name = document.getElementById('upload-name')?.value?.trim()?.toLowerCase();
+  const description = document.getElementById('upload-desc')?.value?.trim();
+  const code = document.getElementById('upload-code')?.value;
+
+  if (!name || !code?.trim()) {
+    toast('Provide command name and code', 'err');
+    return;
+  }
+
+  try {
+    const d = await api('/api/commands/upload', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, code }),
+    }).then(r => r.json());
+
+    if (!d.success) {
+      toast(d.error || 'Upload failed', 'err');
+      return;
+    }
+
+    toast(d.message || `/${name} uploaded`, 'ok');
+    loadLibrary();
+    loadCmds();
+    loadStats();
+  } catch (e) {
+    toast('Upload error: ' + e.message, 'err');
+  }
 }
 function cmdCard(c) {
   const srcBadge = c.source === 'dashboard' ? `<span class="badge-db">dashboard</span>` : `<span class="badge-file">file</span>`;

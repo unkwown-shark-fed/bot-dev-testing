@@ -30,6 +30,7 @@ const PASSWORD  = process.env.DASHBOARD_PASSWORD || '';
 const ROOT      = __dirname;
 const CMD_DIR   = path.join(ROOT, 'commands');
 const LOG_DIR   = path.join(ROOT, 'logs');
+const WRITE_COMMAND_FILES = String(process.env.WRITE_COMMAND_FILES || '').toLowerCase() === 'true';
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -419,8 +420,10 @@ app.post('/api/flow/deploy', auth, async (req, res) => {
       registeredAt: new Date(),
     });
 
-    if (!fs.existsSync(CMD_DIR)) fs.mkdirSync(CMD_DIR, { recursive: true });
-    fs.writeFileSync(path.join(CMD_DIR, `${name}.js`), code, 'utf8');
+    if (WRITE_COMMAND_FILES) {
+      if (!fs.existsSync(CMD_DIR)) fs.mkdirSync(CMD_DIR, { recursive: true });
+      fs.writeFileSync(path.join(CMD_DIR, `${name}.js`), code, 'utf8');
+    }
 
     res.json({ success: true, message: `✅ /${name} saved to MongoDB & registered!`, guilds: results });
   } catch (e) {
