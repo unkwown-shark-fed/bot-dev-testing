@@ -398,7 +398,11 @@ app.post('/api/commands/upload', auth, async (req, res) => {
   }
 
   if (!cmdModule?.data?.toJSON || typeof cmdModule?.execute !== 'function') {
-    return res.status(400).json({ error: 'Code must export { data: SlashCommandBuilder, execute() }' });
+    const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
+    return res.status(400).json({
+      error: 'Code must export { data: SlashCommandBuilder, execute() }',
+      hint: `Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`
+    });
   }
 
   const cmdJson = cmdModule.data.toJSON();
@@ -583,7 +587,7 @@ function loadModuleFromString(code) {
   const m = new Module('');
   m.filename = path.join(CMD_DIR || ROOT, '_preview.js');
   m.paths = Module._nodeModulePaths(CMD_DIR || ROOT);
-  m._compile(code, '_preview.js');
+  m._compile(code, m.filename);
   return m.exports;
 }
 
