@@ -564,10 +564,12 @@ app.post('/api/sync', auth, async (_req, res) => {
 // ── Helper: load module from code string ──────────────────────────────────────
 function loadModuleFromString(code) {
   const Module = require('module');
-  const m = new Module('');
-  m.filename = path.join(CMD_DIR || ROOT, '_preview.js');
-  m.paths = Module._nodeModulePaths(CMD_DIR || ROOT);
-  m._compile(code, '_preview.js');
+  const filename = path.join(CMD_DIR || ROOT, '_preview.js');
+  const m = new Module(filename);
+  m.filename = filename;
+  m.path = path.dirname(filename);
+  m.paths = Module._nodeModulePaths(m.path);
+  m._compile(code, filename);
   return m.exports;
 }
 

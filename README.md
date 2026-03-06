@@ -115,6 +115,18 @@ npm start
 | `DB_ONLY_COMMANDS` | If `true`, bot + deploy scripts load commands only from MongoDB dashboard records | false |
 | `WRITE_COMMAND_FILES` | If `true`, dashboard also writes uploaded/generated commands into `/commands` files | false |
 
+### ✅ Dashboard-only command mode (no `/commands` folder required)
+If you want to eliminate local command files and manage everything from the dashboard:
+
+1. Set `DB_ONLY_COMMANDS=true` in `.env`.
+2. Keep `WRITE_COMMAND_FILES=false` (or unset it) so dashboard uploads are stored only in MongoDB.
+3. Upload/create commands from the dashboard (`/api/commands/upload` or flow deploy).
+4. Run `npm run deploy` to register all DB commands to Discord.
+
+Notes:
+- The bot can now run fully from MongoDB command records.
+- `npm run deploy` will also fall back to MongoDB commands automatically if no file-based commands are found.
+
 ### Optional - Logging
 | Variable | Description | Default |
 |----------|-------------|---------|

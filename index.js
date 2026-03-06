@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, Partials, Collection, PermissionFlagsBits, ActivityType } = require('discord.js');
 require('dotenv').config();
 const path   = require('path');
+const fs     = require('fs');
 const logger = require('./logger');
 const config = require('./config.json');
 const db     = require('./db');
@@ -100,10 +101,12 @@ const dbLoadPromise = (async () => {
 
       try {
         const Module = require('module');
-        const m      = new Module('');
-        m.filename   = path.join(commandsPath, `${record.name}.js`);
-        m.paths      = Module._nodeModulePaths(commandsPath);
-        m._compile(record.code, `${record.name}.js`);
+        const filename = path.join(commandsPath, `${record.name}.js`);
+        const m      = new Module(filename);
+        m.filename   = filename;
+        m.path       = path.dirname(filename);
+        m.paths      = Module._nodeModulePaths(m.path);
+        m._compile(record.code, filename);
         const cmd = m.exports;
 
         if (cmd?.data?.name && typeof cmd.execute === 'function') {
@@ -156,9 +159,10 @@ client.once('ready', async () => {
   // .presence_update.json file. This watcher picks it up and applies it live
   // without needing a bot restart.
   setInterval(() => {
-    const pFile = path.join(__dirname, '.presence_update.json');
-    if (!fs.existsSync(pFile)) return;
     try {
+      const pFile = path.join(__dirname, '.presence_update.json');
+      if (!fs.existsSync(pFile)) return;
+
       const { status, acttype, acttext, ts } = JSON.parse(fs.readFileSync(pFile, 'utf8'));
       // Only apply if written within the last 60 seconds
       if (Date.now() - ts > 60_000) return;

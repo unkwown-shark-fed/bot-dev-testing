@@ -17,6 +17,34 @@ if (!token || !clientId || guildIds.length === 0) {
 }
 
 async function buildCommandsForDeploy() {
+  async function loadDbCommandJson() {
+    console.log('🧠 Loading slash commands from MongoDB records');
+    await db.connect();
+    const records = await db.getAllCommands();
+    const Module = require('module');
+    const commands = [];
+
+    for (const record of records) {
+      if (!record?.code || record?.source !== 'dashboard') continue;
+      try {
+        const filename = path.join(__dirname, 'commands', `_deploy_${record.name}.js`);
+        const m = new Module(filename);
+        m.filename = filename;
+        m.path = path.dirname(filename);
+        m.paths = Module._nodeModulePaths(m.path);
+        m._compile(record.code, filename);
+        const cmd = m.exports;
+        if (cmd?.data?.toJSON) {
+          commands.push(cmd.data.toJSON());
+          console.log(`  ✅ Loaded from DB: /${cmd.data.name}`);
+        }
+      } catch (error) {
+        console.log(`  ⚠️  Skipped DB command ${record.name}: ${error.message}`);
+      }
+    }
+    return commands;
+  }
+
   if (!dbOnlyMode) {
     const commandsPath = path.join(__dirname, 'commands');
     const { loaded, skipped } = loadCommandModules({
@@ -34,32 +62,14 @@ async function buildCommandsForDeploy() {
       console.log(`\n⚠️  Skipped ${skipped.length} file(s):`);
       skipped.forEach(entry => console.log(`   • ${entry.file} — ${entry.reason}`));
     }
-    return commands;
+
+    if (commands.length > 0) return commands;
+
+    console.log('⚠️  No file-based commands found. Falling back to MongoDB commands...');
+    return loadDbCommandJson();
   }
 
-  console.log('🧠 DB_ONLY_COMMANDS=true — loading slash commands from MongoDB records');
-  await db.connect();
-  const records = await db.getAllCommands();
-  const Module = require('module');
-  const commands = [];
-
-  for (const record of records) {
-    if (!record?.code || record?.source !== 'dashboard') continue;
-    try {
-      const m = new Module('');
-      m.filename = path.join(__dirname, `_deploy_${record.name}.js`);
-      m.paths = Module._nodeModulePaths(__dirname);
-      m._compile(record.code, m.filename);
-      const cmd = m.exports;
-      if (cmd?.data?.toJSON) {
-        commands.push(cmd.data.toJSON());
-        console.log(`  ✅ Loaded from DB: /${cmd.data.name}`);
-      }
-    } catch (error) {
-      console.log(`  ⚠️  Skipped DB command ${record.name}: ${error.message}`);
-    }
-  }
-  return commands;
+  return loadDbCommandJson();
 }
 
 // ── Deploy ───────────────────────────────────────────────────────────────────
