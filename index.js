@@ -97,7 +97,6 @@ const dbLoadPromise = (async () => {
 
     for (const record of dbCmds) {
       if (record.source !== 'dashboard' || !record.code) continue;
-      if (client.commands.has(record.name)) continue;
 
       try {
         const Module = require('module');
@@ -108,6 +107,9 @@ const dbLoadPromise = (async () => {
         const cmd = m.exports;
 
         if (cmd?.data?.name && typeof cmd.execute === 'function') {
+          if (client.commands.has(cmd.data.name)) {
+            logger.warn(`DB command ${cmd.data.name} overrides existing file command with the same name`);
+          }
           client.commands.set(cmd.data.name, cmd);
           client.stats.commandUsage[cmd.data.name] = 0;
           dbCount++;

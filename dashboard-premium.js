@@ -145,9 +145,24 @@ app.post('/api/stop', auth, (_req, res) => {
 });
 
 app.post('/api/restart', auth, async (_req, res) => {
-  if (botProcess) { botProcess.kill('SIGTERM'); await new Promise(r => setTimeout(r, 1500)); }
-  res.json({ success: true, message: 'Restarting…' });
-  setTimeout(() => { if (botStatus !== 'running') spawnBot(); }, 600);
+  const proc = botProcess;
+  if (proc) {
+    botStatus = 'stopping';
+    proc.kill('SIGTERM');
+
+    // Wait for confirmed process close (or timeout) to avoid restart races.
+    await Promise.race([
+      new Promise(resolve => proc.once('close', resolve)),
+      new Promise(resolve => setTimeout(resolve, 5000)),
+    ]);
+  }
+
+  if (botProcess) {
+    return res.status(500).json({ error: 'Bot did not stop cleanly; restart aborted' });
+  }
+
+  spawnBot();
+  res.json({ success: true, message: 'Restarted' });
 });
 
 app.get('/api/logs', auth, (req, res) =>
@@ -189,7 +204,8 @@ app.get('/api/settings', auth, (_req, res) => {
     let cfg = {};
     if (fs.existsSync(cfgPath)) cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
     const settings = {
-      nick:     cfg.botNick  || '',
+      // Prefer current key `nick`, but keep backward compatibility with older `botNick`.
+      nick:     cfg.nick ?? cfg.botNick ?? '',
       prefix:   cfg.prefix   || '!',
       status:   cfg.status   || 'idle',
       acttype:  cfg.acttype  || 'Listening',
