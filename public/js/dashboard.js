@@ -235,16 +235,21 @@ function generateCommand() {
     return;
   }
 
+  // Use JSON.stringify so user-provided values can't break generated JS syntax
+  // (quotes, backslashes, newlines, etc.).
+  const jsString = (value) => JSON.stringify(String(value));
+  const commandTitle = `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+
   let code;
   if (type === 'text') {
     code = `const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('${name}')
-    .setDescription('${desc}'),
+    .setName(${jsString(name)})
+    .setDescription(${jsString(desc)}),
   async execute(interaction) {
-    await interaction.reply('${response.replace(/'/g, "\\'")}');
+    await interaction.reply(${jsString(response)});
   }
 };`;
   } else {
@@ -252,12 +257,12 @@ module.exports = {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('${name}')
-    .setDescription('${desc}'),
+    .setName(${jsString(name)})
+    .setDescription(${jsString(desc)}),
   async execute(interaction) {
     const embed = new EmbedBuilder()
-      .setTitle('${name.charAt(0).toUpperCase() + name.slice(1)}')
-      .setDescription('${response.replace(/'/g, "\\'")}')
+      .setTitle(${jsString(commandTitle)})
+      .setDescription(${jsString(response)})
       .setColor(0x5865F2);
     await interaction.reply({ embeds: [embed] });
   }
