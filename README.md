@@ -80,6 +80,7 @@ npm start
 |---------|-------------|----------|
 | `/findids` | Find user IDs by searching usernames | 10s |
 | `/listusers` | Paginated list of members with a role | N/A |
+| `/reactafter` | React to messages after a starting message link | 10s |
 
 ### 🎮 Gaming Commands
 | Command | Description | Cooldown |
@@ -118,6 +119,7 @@ npm start
 | `LOG_FILE` | Main log file path | logs/bot.log |
 | `ERROR_LOG_FILE` | Error log file path | logs/error.log |
 | `LOG_LEVEL` | Logging level (error/warn/info/debug) | info |
+| `DASHBOARD_PASSWORD` | Auth token/password required by premium dashboard API | Required for dashboard |
 
 ---
 

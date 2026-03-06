@@ -26,13 +26,18 @@ const db           = require('./db');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PORT      = parseInt(process.env.WEB_DASHBOARD_PORT || '3000', 10);
-const PASSWORD  = process.env.DASHBOARD_PASSWORD || 'admin123';
+const PASSWORD  = process.env.DASHBOARD_PASSWORD || '';
 const ROOT      = __dirname;
 const CMD_DIR   = path.join(ROOT, 'commands');
 const LOG_DIR   = path.join(ROOT, 'logs');
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+if (!PASSWORD) {
+  console.error('❌ DASHBOARD_PASSWORD is required in environment. Refusing to start dashboard.');
+  process.exit(1);
+}
 
 // ── Schedule Model ─────────────────────────────────────────────────────────────
 function getScheduleModel() {
@@ -335,6 +340,14 @@ app.get('/api/commands/:name', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/api/commands/:name/content', auth, async (req, res) => {
+  try {
+    const cmd = await db.getCommand(req.params.name);
+    if (!cmd) return res.status(404).json({ error: 'Not found' });
+    res.json({ content: cmd.code || '' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/api/commands/:name', auth, async (req, res) => {
   try {
     const cmd = await db.getCommand(req.params.name);
@@ -501,11 +514,29 @@ function buildConditions(conditions) {
   return conditions.map(c => {
     const fail = j(c.failMessage || '❌ You do not have permission to use this command.');
     switch (c.type) {
-      case 'has_role':     return `    if (!interaction.member?.roles?.cache?.some(r => r.name === ${j(c.value)} || r.id === ${j(c.value)}))\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
-      case 'missing_role': return `    if (interaction.member?.roles?.cache?.some(r => r.name === ${j(c.value)} || r.id === ${j(c.value)}))\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
-      case 'in_channel':   return `    if (interaction.channel?.name !== ${j(c.value)} && interaction.channelId !== ${j(c.value)})\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
-      case 'is_admin':     return `    if (!interaction.member?.permissions?.has('Administrator'))\n      return interaction.reply({ content: ${fail}, ephemeral: true });`;
-      default: return '';
+      case 'has_role':
+        return `    if (!interaction.member?.roles?.cache?.some(r => r.name === ${j(c.value)} || r.id === ${j(c.value)}))
+      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'missing_role':
+        return `    if (interaction.member?.roles?.cache?.some(r => r.name === ${j(c.value)} || r.id === ${j(c.value)}))
+      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'in_channel':
+        return `    if (interaction.channel?.name !== ${j(c.value)} && interaction.channelId !== ${j(c.value)})
+      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'is_admin':
+        return `    if (!interaction.member?.permissions?.has('Administrator'))
+      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'is_owner':
+        return `    if (interaction.guild?.ownerId !== interaction.user?.id)
+      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'not_bot':
+        return `    if (interaction.user?.bot)
+      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      case 'account_age_days':
+        return `    if (((Date.now() - (interaction.user?.createdTimestamp || 0)) / 86400000) < ${Number(c.value || 0)})
+      return interaction.reply({ content: ${fail}, ephemeral: true });`;
+      default:
+        return '';
     }
   }).filter(Boolean).join('\n\n');
 }
@@ -940,6 +971,24 @@ function buildUtilAction(a, ind, ctx = 'interaction') {
       return out.join('\n').replace(/\binteraction\b/g, ctx);
     }
 
+    case 'react_to_message': {
+      const emo = a.emoji || '✅';
+      const target = a.target || 'trigger';
+      if (ctx === 'message' || target === 'trigger') {
+        return c('try { await ', ctx, '.react(', jv(emo), '); } catch (_) {}');
+      }
+      return [
+        c('try {'),
+        c('  if (', ctx, '.replied || ', ctx, '.deferred) { const _r = await ', ctx, '.fetchReply().catch(()=>null); if (_r) await _r.react(', jv(emo), '); }'),
+        c('} catch (_) {}'),
+      ].join('\n');
+    }
+
+    case 'wait_ms': {
+      const ms = Math.max(50, Math.min(10000, parseInt(a.ms) || 500));
+      return c('await new Promise(r => setTimeout(r, ', String(ms), '));');
+    }
+
     default: return '';
   }
 }
@@ -952,7 +1001,7 @@ function buildActions(actions, ind = '    ', ctx = 'interaction') {
       return buildModalFormAction(a, ind);
     }
     // Utility actions
-    const utilTypes = ['purge_messages','kick_member','ban_member','timeout_member','add_role','remove_role','user_info','server_info','list_role_members','dm_user','repost_messages'];
+    const utilTypes = ['purge_messages','kick_member','ban_member','timeout_member','add_role','remove_role','user_info','server_info','list_role_members','dm_user','repost_messages','react_to_message','wait_ms'];
     if (utilTypes.includes(a.type)) return buildUtilAction(a, ind, ctx);
     const eph = a.ephemeral ? ', ephemeral: true' : '';
     switch (a.type) {
@@ -995,12 +1044,33 @@ function genSlash(name, desc, trigger, conditions, actions) {
     const n = j(sanitizeName(o.name)), d = j(o.description || o.name);
     const req = `\n        .setRequired(${!!o.required})`;
     switch (o.type) {
-      case 'string':  return `    .addStringOption(o => o.setName(${n}).setDescription(${d})${req})`;
-      case 'integer': return `    .addIntegerOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'string': {
+        const minL = Number.isFinite(Number(o.minLength)) ? `
+        .setMinLength(${Number(o.minLength)})` : '';
+        const maxL = Number.isFinite(Number(o.maxLength)) ? `
+        .setMaxLength(${Number(o.maxLength)})` : '';
+        return `    .addStringOption(o => o.setName(${n}).setDescription(${d})${req}${minL}${maxL})`;
+      }
+      case 'integer': {
+        const min = Number.isFinite(Number(o.min)) ? `
+        .setMinValue(${Number(o.min)})` : '';
+        const max = Number.isFinite(Number(o.max)) ? `
+        .setMaxValue(${Number(o.max)})` : '';
+        return `    .addIntegerOption(o => o.setName(${n}).setDescription(${d})${req}${min}${max})`;
+      }
+      case 'number': {
+        const min = Number.isFinite(Number(o.min)) ? `
+        .setMinValue(${Number(o.min)})` : '';
+        const max = Number.isFinite(Number(o.max)) ? `
+        .setMaxValue(${Number(o.max)})` : '';
+        return `    .addNumberOption(o => o.setName(${n}).setDescription(${d})${req}${min}${max})`;
+      }
       case 'user':    return `    .addUserOption(o => o.setName(${n}).setDescription(${d})${req})`;
       case 'boolean': return `    .addBooleanOption(o => o.setName(${n}).setDescription(${d})${req})`;
       case 'channel': return `    .addChannelOption(o => o.setName(${n}).setDescription(${d})${req})`;
       case 'role':    return `    .addRoleOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'mentionable': return `    .addMentionableOption(o => o.setName(${n}).setDescription(${d})${req})`;
+      case 'attachment': return `    .addAttachmentOption(o => o.setName(${n}).setDescription(${d})${req})`;
       default: return '';
     }
   }).filter(Boolean).join('\n');
@@ -1093,7 +1163,13 @@ function genKeyword(name, desc, trigger, conditions, actions) {
       case 'reply_text':   return `    await message.reply({ content: ${j(a.content||'')} });`;
       case 'reply_embed':  return embedBlock(a,'    ') + `\n    await message.reply({ embeds: [embed] });`;
       case 'send_to_channel': return `    {\n      const _ch = message.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n      if (_ch?.isTextBased?.()) await _ch.send({ content: ${j(a.content||'')} });\n    }`;
-      case 'send_embed_to_channel': return `    {\n${embedBlock(a,'      ')}\n      const _ch = message.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});\n      if (_ch?.isTextBased?.()) await _ch.send({ embeds: [embed] });\n    }`;
+      case 'send_embed_to_channel': return `    {
+${embedBlock(a,'      ')}
+      const _ch = message.guild?.channels?.cache?.find(c => c.name === ${j(a.channel||'')} || c.id === ${j(a.channel||'')});
+      if (_ch?.isTextBased?.()) await _ch.send({ embeds: [embed] });
+    }`;
+      case 'react_to_message': return `    try { await message.react(${j(a.emoji || '✅')}); } catch(_) {}`;
+      case 'wait_ms': return `    await new Promise(r => setTimeout(r, ${Math.max(50, Math.min(10000, parseInt(a.ms) || 500))}));`;
       default: return '';
     }
   }).filter(Boolean).join('\n\n');

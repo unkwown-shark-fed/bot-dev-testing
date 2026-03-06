@@ -190,7 +190,8 @@ input[type=color] { cursor: pointer; }
 .color-pair .finput { flex: 1; }
 .cprev { width: 36px; height: 34px; border-radius: 8px; border: 1px solid var(--line); flex-shrink: 0; }
 
-.mcard { background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 11px; margin-bottom: 10px; }
+.mcard { background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.04)); border: 1px solid var(--line); border-radius: 10px; padding: 11px; margin-bottom: 10px; box-shadow: 0 6px 16px rgba(0,0,0,.18); }
+.mcard:hover { border-color: rgba(108,99,255,.45); }
 .mcard-trig { border-left: 3px solid var(--trig); }
 .mcard-cond { border-left: 3px solid var(--cond); }
 .mcard-act  { border-left: 3px solid var(--act); }
@@ -469,7 +470,7 @@ input[type=color] { cursor: pointer; }
 .ep-fields { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
 .ep-field { background:var(--bg3); border-radius:6px; padding:6px 10px; min-width:120px; flex:1; }
 .ep-field-name  { font-size:11px; font-weight:700; color:var(--t1); margin-bottom:2px; }
-.ep-field-value { font-size:12px; color:var(--t2); }
+.ep-field-value { font-size:12px; color:var(--t2); white-space: pre-wrap; }
 .ep-image { width:100%; border-radius:6px; margin-bottom:10px; max-height:200px; object-fit:cover; }
 .ep-thumb { float:right; width:70px; height:70px; border-radius:6px; object-fit:cover; margin-left:12px; }
 .ep-footer { font-size:11px; color:var(--t3); display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
@@ -681,6 +682,9 @@ input[type=color] { cursor: pointer; }
                 <option value="missing_role">User missing role</option>
                 <option value="in_channel">Must be in channel</option>
                 <option value="is_admin">User is Administrator</option>
+                <option value="is_owner">User is Server Owner</option>
+                <option value="not_bot">User is not a bot</option>
+                <option value="account_age_days">Account age at least N days</option>
               </select>
               <button class="sbtn pri" onclick="addCond()">＋ Add</button>
             </div>
@@ -698,6 +702,8 @@ input[type=color] { cursor: pointer; }
                 <option value="followup_embed">➕ Follow-up — Embed</option>
                 <option value="send_to_channel">📤 Send to Channel — Text</option>
                 <option value="send_embed_to_channel">📤 Send to Channel — Embed</option>
+                <option value="react_to_message">✨ React to Trigger Message</option>
+                <option value="wait_ms">⏳ Wait / Delay</option>
                 <option value="modal_form">📝 Modal Form</option>
                 <option value="quote_messages">💬 Quote Messages</option>
               </select>
@@ -1385,11 +1391,13 @@ function renderOpts() {
         <input class="finput" value="${esc(o.name)}" placeholder="option_name" oninput="updOpt(${o.id},'name',this.value)"></div>
       <div class="frow"><div class="flabel">Type</div>
         <select class="fsel" onchange="updOpt(${o.id},'type',this.value)">
-          ${['string','integer','user','boolean','channel','role'].map(t=>`<option value="${t}"${o.type===t?' selected':''}>${t}</option>`).join('')}
+          ${['string','integer','number','user','boolean','channel','role','mentionable','attachment'].map(t=>`<option value="${t}"${o.type===t?' selected':''}>${t}</option>`).join('')}
         </select></div>
       <div class="frow"><div class="flabel">Description</div>
         <input class="finput" value="${esc(o.description)}" placeholder="Describe this option" oninput="updOpt(${o.id},'description',this.value)"></div>
       <label class="crow"><input type="checkbox" ${o.required?'checked':''} onchange="updOpt(${o.id},'required',this.checked)"><label>Required</label></label>
+      ${(o.type==='string') ? `<div class="frow"><div class="flabel">Text limits <span class="fsub">optional</span></div><div style="display:flex;gap:8px"><input class="finput" type="number" min="1" placeholder="Min" value="${esc(o.minLength||'')}" oninput="updOpt(${o.id},'minLength',this.value?parseInt(this.value):'')"><input class="finput" type="number" min="1" placeholder="Max" value="${esc(o.maxLength||'')}" oninput="updOpt(${o.id},'maxLength',this.value?parseInt(this.value):'')"></div></div>` : ''}
+      ${(o.type==='integer' || o.type==='number') ? `<div class="frow"><div class="flabel">Number limits <span class="fsub">optional</span></div><div style="display:flex;gap:8px"><input class="finput" type="number" placeholder="Min" value="${esc(o.min||'')}" oninput="updOpt(${o.id},'min',this.value===''?'':Number(this.value))"><input class="finput" type="number" placeholder="Max" value="${esc(o.max||'')}" oninput="updOpt(${o.id},'max',this.value===''?'':Number(this.value))"></div></div>` : ''}
     </div>`).join('');
 }
 
@@ -1443,13 +1451,13 @@ function addCond() {
 }
 function removeCond(id) { conds = conds.filter(c => c.id !== id); renderConds(); }
 function updCond(id, k, v) { const c = conds.find(x => x.id === id); if (c) { c[k] = v; preview(); } }
-const condLbl = { has_role:'Has Role', missing_role:'Missing Role', in_channel:'In Channel', is_admin:'Is Admin' };
+const condLbl = { has_role:'Has Role', missing_role:'Missing Role', in_channel:'In Channel', is_admin:'Is Admin', is_owner:'Is Owner', not_bot:'Not Bot User', account_age_days:'Account Age (days)' };
 function renderConds() {
   document.getElementById('cond-list').innerHTML = conds.map(c => `
     <div class="mcard mcard-cond">
       <div class="mcard-hd"><span class="mtitle">${condLbl[c.type]||c.type}</span><button class="xbtn" onclick="removeCond(${c.id})">×</button></div>
-      ${c.type !== 'is_admin' ? `<div class="frow"><div class="flabel">${c.type === 'in_channel' ? 'Channel name/ID' : 'Role name/ID'}</div>
-        <input class="finput" value="${esc(c.value)}" placeholder="${c.type==='in_channel'?'general':'Member'}" oninput="updCond(${c.id},'value',this.value)"></div>` : ''}
+      ${!['is_admin','is_owner','not_bot'].includes(c.type) ? `<div class="frow"><div class="flabel">${c.type === 'in_channel' ? 'Channel name/ID' : c.type === 'account_age_days' ? 'Minimum days' : 'Role name/ID'}</div>
+        <input class="finput" value="${esc(c.value)}" placeholder="${c.type==='in_channel'?'general':c.type==='account_age_days'?'30':'Member'}" oninput="updCond(${c.id},'value',this.value)"></div>` : ''}
       <div class="frow"><div class="flabel">Fail message</div>
         <input class="finput" value="${esc(c.failMessage)}" placeholder="❌ You can't do that." oninput="updCond(${c.id},'failMessage',this.value)"></div>
     </div>`).join('');
@@ -1509,7 +1517,7 @@ const actLbl = {
   add_role:'🏷️ Add Role', remove_role:'🏷️ Remove Role',
   user_info:'👤 User Info', server_info:'🖥️ Server Info',
   list_role_members:'📋 List Role Members',
-  dm_user:'📩 DM User', repost_messages:'🔁 Repost Messages'
+  dm_user:'📩 DM User', repost_messages:'🔁 Repost Messages', react_to_message:'✨ React to Trigger Message', wait_ms:'⏳ Wait / Delay'
 };
 function renderActs() {
   document.getElementById('act-list').innerHTML = acts.map(a => {
@@ -1566,6 +1574,13 @@ function renderActs() {
       { key:'target_channel', label:'Target channel (name or ID)', type:'text', placeholder:'highlights' },
       { key:'limit', label:'Max messages', type:'number', placeholder:'20', min:1, max:200 },
       { key:'include_link', label:'Include original link', type:'checkbox', default:true },
+    ]);
+    if (a.type === 'react_to_message') return renderUtilAct(a, [
+      { key:'emoji', label:'Emoji', type:'text', placeholder:'✅' },
+      { key:'target', label:'Target', type:'select', options:['trigger','reply'], default:'trigger' },
+    ]);
+    if (a.type === 'wait_ms') return renderUtilAct(a, [
+      { key:'ms', label:'Delay in milliseconds', type:'number', placeholder:'500', min:50, max:10000 },
     ]);
     const isE  = a.type.includes('embed');
     const isCh = a.type.includes('to_channel');
@@ -1801,6 +1816,10 @@ function renderUtilAct(a, fields) {
     }
     if (f.type === 'textarea') {
       return `<div class="frow"><div class="flabel">${f.label}</div><textarea class="ftextarea" placeholder="${f.placeholder||''}" oninput="updAct(${a.id},'${f.key}',this.value)">${esc(val)}</textarea></div>`;
+    }
+    if (f.type === 'select') {
+      const opts = (f.options || []).map(op => `<option value="${op}"${String(val||f.default||'')===String(op)?' selected':''}>${op}</option>`).join('');
+      return `<div class="frow"><div class="flabel">${f.label}</div><select class="fsel" onchange="updAct(${a.id},'${f.key}',this.value)">${opts}</select></div>`;
     }
     if (f.type === 'number') {
       return `<div class="frow"><div class="flabel">${f.label}</div><input class="finput" type="number" min="${f.min||1}" max="${f.max||999}" value="${val||f.placeholder||''}" placeholder="${f.placeholder||''}" oninput="updAct(${a.id},'${f.key}',parseInt(this.value)||${f.min||1})"></div>`;
@@ -2057,7 +2076,7 @@ function _renderPreview() {
   }
   nodes.push({ cls:'fn-trig', icon:tIcons[ttype], name:tNames[ttype], type:'trigger', fields:tFields });
   conds.forEach(c => {
-    const ln = { has_role:'👤 Has Role', missing_role:'🚫 Missing Role', in_channel:'📍 In Channel', is_admin:'🛡 Is Admin' };
+    const ln = { has_role:'👤 Has Role', missing_role:'🚫 Missing Role', in_channel:'📍 In Channel', is_admin:'🛡 Is Admin', is_owner:'👑 Is Owner', not_bot:'🤖 Not Bot', account_age_days:'📅 Account Age' };
     nodes.push({ cls:'fn-cond', icon:'⚙️', name:ln[c.type]||c.type, type:'condition', fields:c.value?[{k:'Value',v:c.value}]:[] });
   });
   acts.forEach(a => {
@@ -2409,9 +2428,23 @@ function renderEmbedFields() {
       <div class="frow"><div class="flabel">Name</div>
         <input class="finput" value="${esc(f.name)}" placeholder="Field name" oninput="updEbField(${f.id},'name',this.value)"></div>
       <div class="frow"><div class="flabel">Value</div>
-        <input class="finput" value="${esc(f.value)}" placeholder="Field value" oninput="updEbField(${f.id},'value',this.value)"></div>
+        <textarea class="ftextarea" placeholder="Field value (new lines supported)" oninput="updEbField(${f.id},'value',this.value)">${esc(f.value)}</textarea></div>
       <label class="crow"><input type="checkbox" ${f.inline?'checked':''} onchange="updEbField(${f.id},'inline',this.checked)"><label>Inline</label></label>
     </div>`).join('');
+}
+
+function normalizeEmbedButtons() {
+  return ebBtns.slice(0, 5).map((b, idx) => {
+    const style = b.style || 'Link';
+    const label = (b.label || 'Button').trim();
+    const safeId = (b.customId || '').trim() || `btn_${Date.now()}_${idx}`;
+    const safeUrl = (b.url || '').trim();
+    return {
+      style,
+      label,
+      ...(style === 'Link' ? { url: safeUrl || 'https://discord.com' } : { customId: safeId })
+    };
+  });
 }
 
 function getEmbedData() {
@@ -2470,9 +2503,12 @@ function liveEmbed() {
       ${imageHtml}
       ${footerHtml}
     </div>
-    ${ebBtns.length ? `<div class="ep-btns">${ebBtns.map(b => {
+    ${ebBtns.length ? `<div class="ep-btns">${normalizeEmbedButtons().map(b => {
       const styleMap = { Primary:'ep-btn-primary', Secondary:'ep-btn-secondary', Success:'ep-btn-success', Danger:'ep-btn-danger', Link:'ep-btn-link' };
-      return `<a class="ep-btn ${styleMap[b.style]||'ep-btn-primary'}" href="${esc(b.url||'#')}" target="_blank" rel="noopener">${esc(b.label||'Button')}</a>`;
+      if (b.style === 'Link') {
+        return `<a class="ep-btn ${styleMap[b.style]||'ep-btn-primary'}" href="${esc(b.url||'#')}" target="_blank" rel="noopener">${esc(b.label||'Button')}</a>`;
+      }
+      return `<button type="button" class="ep-btn ${styleMap[b.style]||'ep-btn-primary'}" title="customId: ${esc(b.customId || '')}" onclick="return false;">${esc(b.label||'Button')}</button>`;
     }).join('')}</div>` : ''}`;
 }
 
@@ -2482,7 +2518,10 @@ async function sendEmbed() {
   const e = getEmbedData();
   if (!e.title && !e.description) { toast('Add a title or description', 'err'); return; }
   try {
-    const d = await api('/api/embed/send', { method:'POST', body: JSON.stringify({ channel, embed: e, buttons: ebBtns, content: e.content }) }).then(r => r.json());
+    const d = await api('/api/embed/send', {
+      method:'POST',
+      body: JSON.stringify({ channel, embed: e, buttons: normalizeEmbedButtons(), content: e.content })
+    }).then(r => r.json());
     toast(d.success ? `✅ Embed sent to #${channel}!` : (d.error || 'Failed'), d.success ? 'ok' : 'err');
   } catch(ex) { toast('Error: ' + ex.message, 'err'); }
 }
@@ -2502,11 +2541,11 @@ function copyEmbedJSON() {
       ...(e.image && { image: { url: e.image } }),
       ...(e.fields.length && { fields: e.fields.map(f => ({ name:f.name, value:f.value, inline:f.inline })) })
     }],
-    ...(ebBtns.length && { components: [{ type: 1, components: ebBtns.map(b => ({
+    ...(ebBtns.length && { components: [{ type: 1, components: normalizeEmbedButtons().map(b => ({
       type: 2,
       style: { Link:5, Primary:1, Secondary:2, Success:3, Danger:4 }[b.style] || 5,
       label: b.label,
-      url: b.url
+      ...(b.style === 'Link' ? { url: b.url } : { custom_id: b.customId })
     })) }] })
   };
   navigator.clipboard.writeText(JSON.stringify(djsObj, null, 2));
@@ -2555,7 +2594,9 @@ function renderEmbedBtns() {
           ${['Link','Primary','Secondary','Success','Danger'].map(s=>`<option value="${s}"${b.style===s?' selected':''}>${s}</option>`).join('')}
         </select></div>
       <div class="frow"><div class="flabel">URL</div>
-        <input class="finput" value="${esc(b.url)}" placeholder="https://example.com" oninput="updEbBtn(${b.id},'url',this.value)"></div>
+        <input class="finput" value="${esc(b.url)}" placeholder="https://example.com" oninput="updEbBtn(${b.id},'url',this.value)" ${b.style !== 'Link' ? 'disabled' : ''}></div>
+      <div class="frow"><div class="flabel">Custom ID</div>
+        <input class="finput" value="${esc(b.customId||'')}" placeholder="btn_action" oninput="updEbBtn(${b.id},'customId',this.value)" ${b.style === 'Link' ? 'disabled' : ''}></div>
     </div>`).join('');
 }
 
