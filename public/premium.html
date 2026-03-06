@@ -1332,7 +1332,8 @@ async function uploadCommandCode() {
     }).then(r => r.json());
 
     if (!d.success) {
-      toast(d.error || 'Upload failed', 'err');
+      const details = [d.error, d.hint, d.example ? `Example: ${d.example}` : ''].filter(Boolean).join('\n');
+      toast(details || 'Upload failed', 'err');
       return;
     }
 
