@@ -59,8 +59,24 @@ function getScheduleModel() {
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(ROOT, 'public')));
-app.get('/', (_req, res) => res.sendFile(path.join(ROOT, 'public', 'premium.html')));
+app.use(express.static(path.join(ROOT, 'public'), {
+  etag: false,
+  maxAge: 0,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+    }
+  },
+}));
+app.get('/', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.sendFile(path.join(ROOT, 'public', 'premium.html'));
+});
 
 function auth(req, res, next) {
   if ((req.headers.authorization || '') !== `Bearer ${PASSWORD}`)
@@ -347,6 +363,70 @@ app.get('/api/commands/:name/content', auth, async (req, res) => {
     if (!cmd) return res.status(404).json({ error: 'Not found' });
     res.json({ content: cmd.code || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/commands/upload', auth, async (req, res) => {
+  const { name: rawName, code, description = '' } = req.body || {};
+  const name = sanitizeName(rawName);
+  if (!name) return res.status(400).json({ error: 'Invalid command name' });
+  if (!code || typeof code !== 'string') return res.status(400).json({ error: 'Command code is required' });
+  if (!TOKEN) return res.status(400).json({ error: 'DISCORD_TOKEN missing in .env' });
+  if (!CLIENT_ID) return res.status(400).json({ error: 'CLIENT_ID missing in .env' });
+  if (!GUILD_IDS.length) return res.status(400).json({ error: 'GUILD_IDS missing in .env' });
+
+  let cmdModule;
+  try {
+    cmdModule = loadModuleFromString(code);
+  } catch (e) {
+    return res.status(400).json({ error: `Code syntax error: ${e.message}` });
+  }
+
+  if (!cmdModule?.data?.toJSON || typeof cmdModule?.execute !== 'function') {
+    return res.status(400).json({ error: 'Code must export { data: SlashCommandBuilder, execute() }' });
+  }
+
+  const cmdJson = cmdModule.data.toJSON();
+  if (!cmdJson?.name || cmdJson.name !== name) {
+    return res.status(400).json({ error: 'Body command name must match exported slash command name' });
+  }
+
+  try {
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+    const results = [];
+
+    for (const gid of GUILD_IDS) {
+      const existing = await rest.get(Routes.applicationGuildCommands(CLIENT_ID, gid));
+      const match = existing.find(c => c.name === name);
+      const discordCmd = match
+        ? await rest.patch(Routes.applicationGuildCommand(CLIENT_ID, gid, match.id), { body: cmdJson })
+        : await rest.post(Routes.applicationGuildCommands(CLIENT_ID, gid), { body: cmdJson });
+      results.push({ guild: gid, id: discordCmd.id, action: match ? 'updated' : 'created' });
+    }
+
+    await db.upsertCommand(name, {
+      name,
+      description: description || cmdJson.description || 'Uploaded via dashboard',
+      source: 'dashboard',
+      flow: null,
+      code,
+      registered: true,
+      registeredAt: new Date(),
+    });
+
+    if (WRITE_COMMAND_FILES) {
+      if (!fs.existsSync(CMD_DIR)) fs.mkdirSync(CMD_DIR, { recursive: true });
+      fs.writeFileSync(path.join(CMD_DIR, `${name}.js`), code, 'utf8');
+    }
+
+    res.json({
+      success: true,
+      message: `✅ /${name} uploaded to MongoDB and registered in Discord`,
+      guilds: results,
+      wroteFile: WRITE_COMMAND_FILES,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.delete('/api/commands/:name', auth, async (req, res) => {
