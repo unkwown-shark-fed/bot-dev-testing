@@ -7,12 +7,13 @@ function scanCommandFiles(commandsPath) {
 }
 
 function loadCommandModules({ commandsPath, clearCache = false, requireExecute = true } = {}) {
-  const files = scanCommandFiles(commandsPath);
+  const basePath = path.resolve(commandsPath || '.');
+  const files = scanCommandFiles(basePath);
   const loaded = [];
   const skipped = [];
 
   for (const file of files) {
-    const filePath = path.join(commandsPath, file);
+    const filePath = path.join(basePath, file);
 
     try {
       if (clearCache) {
