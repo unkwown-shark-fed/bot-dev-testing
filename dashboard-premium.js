@@ -398,27 +398,7 @@ app.post('/api/commands/upload', auth, async (req, res) => {
   }
 
   if (!cmdModule?.data?.toJSON || typeof cmdModule?.execute !== 'function') {
-    const hasModuleExports = /\bmodule\.exports\b|\bexports\./.test(code);
-    const looksLikeBotEntrypoint = /\bnew\s+Client\s*\(|\bclient\.login\s*\(/.test(code);
-    const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
-
-    let hint = `Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`;
-    if (!hasModuleExports) {
-      hint += '. This file does not appear to export anything (missing module.exports / exports.*).';
-    }
-    if (looksLikeBotEntrypoint) {
-      hint += ' The uploaded code looks like a bot entry file (index.js), not a slash command module.';
-    }
-
-    return res.status(400).json({
-      error: 'Code must export { data: SlashCommandBuilder, execute() }',
-      hint,
-      example: "module.exports = { data: new SlashCommandBuilder().setName('ping').setDescription('...'), async execute(interaction) { await interaction.reply('pong'); } }"
-    const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
-    return res.status(400).json({
-      error: 'Code must export { data: SlashCommandBuilder, execute() }',
-      hint: `Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`
-    });
+    return res.status(400).json(buildInvalidCommandUploadResponse(code, cmdModule));
   }
 
   const cmdJson = cmdModule.data.toJSON();
@@ -605,6 +585,27 @@ function loadModuleFromString(code) {
   m.paths = Module._nodeModulePaths(CMD_DIR || ROOT);
   m._compile(code, m.filename);
   return m.exports;
+}
+
+
+function buildInvalidCommandUploadResponse(code, cmdModule) {
+  const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
+  const hasModuleExports = /\bmodule\.exports\b|\bexports\./.test(code);
+  const looksLikeBotEntrypoint = /\bnew\s+Client\s*\(|\bclient\.login\s*\(/.test(code);
+
+  const hints = [`Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`];
+  if (!hasModuleExports) {
+    hints.push('This file does not appear to export anything (missing module.exports / exports.*).');
+  }
+  if (looksLikeBotEntrypoint) {
+    hints.push('The uploaded code looks like a bot entry file (index.js), not a slash command module.');
+  }
+
+  return {
+    error: 'Code must export { data: SlashCommandBuilder, execute() }',
+    hint: hints.join(' '),
+    example: "module.exports = { data: new SlashCommandBuilder().setName('ping').setDescription('...'), async execute(interaction) { await interaction.reply('pong'); } }",
+  };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
