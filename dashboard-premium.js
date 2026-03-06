@@ -398,6 +398,22 @@ app.post('/api/commands/upload', auth, async (req, res) => {
   }
 
   if (!cmdModule?.data?.toJSON || typeof cmdModule?.execute !== 'function') {
+    const hasModuleExports = /\bmodule\.exports\b|\bexports\./.test(code);
+    const looksLikeBotEntrypoint = /\bnew\s+Client\s*\(|\bclient\.login\s*\(/.test(code);
+    const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
+
+    let hint = `Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`;
+    if (!hasModuleExports) {
+      hint += '. This file does not appear to export anything (missing module.exports / exports.*).';
+    }
+    if (looksLikeBotEntrypoint) {
+      hint += ' The uploaded code looks like a bot entry file (index.js), not a slash command module.';
+    }
+
+    return res.status(400).json({
+      error: 'Code must export { data: SlashCommandBuilder, execute() }',
+      hint,
+      example: "module.exports = { data: new SlashCommandBuilder().setName('ping').setDescription('...'), async execute(interaction) { await interaction.reply('pong'); } }"
     const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
     return res.status(400).json({
       error: 'Code must export { data: SlashCommandBuilder, execute() }',
