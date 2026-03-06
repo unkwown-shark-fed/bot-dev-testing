@@ -3,42 +3,72 @@ require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 const { loadCommandModules } = require('./utils/command-loader');
+const db = require('./db');
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildIdsEnv = process.env.GUILD_IDS || '';
 const guildIds = guildIdsEnv.split(',').map(s => s.trim()).filter(Boolean);
+const dbOnlyMode = String(process.env.DB_ONLY_COMMANDS || '').toLowerCase() === 'true';
 
 if (!token || !clientId || guildIds.length === 0) {
   console.error('❌ Missing DISCORD_TOKEN, CLIENT_ID, or GUILD_IDS in .env');
   process.exit(1);
 }
 
-// ── Auto-scan /commands folder ───────────────────────────────────────────────
-const commandsPath = path.join(__dirname, 'commands');
-const { loaded, skipped } = loadCommandModules({
-  commandsPath,
-  clearCache: true,
-  requireExecute: false,
-});
+async function buildCommandsForDeploy() {
+  if (!dbOnlyMode) {
+    const commandsPath = path.join(__dirname, 'commands');
+    const { loaded, skipped } = loadCommandModules({
+      commandsPath,
+      clearCache: true,
+      requireExecute: false,
+    });
 
-const commands = loaded.map(({ command, file }) => {
-  console.log(`  ✅ Loaded: /${command.data.name}  (${file})`);
-  return command.data.toJSON();
-});
+    const commands = loaded.map(({ command, file }) => {
+      console.log(`  ✅ Loaded: /${command.data.name}  (${file})`);
+      return command.data.toJSON();
+    });
 
-if (skipped.length) {
-  console.log(`\n⚠️  Skipped ${skipped.length} file(s):`);
-  skipped.forEach(entry => console.log(`   • ${entry.file} — ${entry.reason}`));
+    if (skipped.length) {
+      console.log(`\n⚠️  Skipped ${skipped.length} file(s):`);
+      skipped.forEach(entry => console.log(`   • ${entry.file} — ${entry.reason}`));
+    }
+    return commands;
+  }
+
+  console.log('🧠 DB_ONLY_COMMANDS=true — loading slash commands from MongoDB records');
+  await db.connect();
+  const records = await db.getAllCommands();
+  const Module = require('module');
+  const commands = [];
+
+  for (const record of records) {
+    if (!record?.code || record?.source !== 'dashboard') continue;
+    try {
+      const m = new Module('');
+      m.filename = path.join(__dirname, `_deploy_${record.name}.js`);
+      m.paths = Module._nodeModulePaths(__dirname);
+      m._compile(record.code, m.filename);
+      const cmd = m.exports;
+      if (cmd?.data?.toJSON) {
+        commands.push(cmd.data.toJSON());
+        console.log(`  ✅ Loaded from DB: /${cmd.data.name}`);
+      }
+    } catch (error) {
+      console.log(`  ⚠️  Skipped DB command ${record.name}: ${error.message}`);
+    }
+  }
+  return commands;
 }
-
-console.log(`\n📋 Registering ${commands.length} command(s) to ${guildIds.length} guild(s)...\n`);
 
 // ── Deploy ───────────────────────────────────────────────────────────────────
 const rest = new REST({ version: '10' }).setToken(token);
 
 (async () => {
   try {
+    const commands = await buildCommandsForDeploy();
+    console.log(`\n📋 Registering ${commands.length} command(s) to ${guildIds.length} guild(s)...\n`);
     for (const guildId of guildIds) {
       console.log(`⏳ Deploying to guild ${guildId}...`);
 
