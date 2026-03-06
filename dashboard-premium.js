@@ -414,6 +414,10 @@ app.post('/api/commands/upload', auth, async (req, res) => {
       error: 'Code must export { data: SlashCommandBuilder, execute() }',
       hint,
       example: "module.exports = { data: new SlashCommandBuilder().setName('ping').setDescription('...'), async execute(interaction) { await interaction.reply('pong'); } }"
+    const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
+    return res.status(400).json({
+      error: 'Code must export { data: SlashCommandBuilder, execute() }',
+      hint: `Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`
     });
   }
 
