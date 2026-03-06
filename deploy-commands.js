@@ -33,6 +33,10 @@ async function buildCommandsForDeploy() {
         m.path = path.dirname(filename);
         m.paths = Module._nodeModulePaths(m.path);
         m._compile(record.code, filename);
+        const m = new Module('');
+        m.filename = path.join(__dirname, `_deploy_${record.name}.js`);
+        m.paths = Module._nodeModulePaths(__dirname);
+        m._compile(record.code, m.filename);
         const cmd = m.exports;
         if (cmd?.data?.toJSON) {
           commands.push(cmd.data.toJSON());
