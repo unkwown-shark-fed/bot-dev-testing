@@ -33,17 +33,17 @@ const logger = winston.createLogger({
     new winston.transports.Console({
       format: consoleFormat
     }),
-    
+
     // All logs to main file
-    new winston.transports.File({ 
+    new winston.transports.File({
       filename: path.resolve(logFile),
       format: fileFormat,
       maxsize: 5242880, // 5MB
       maxFiles: 5
     }),
-    
+
     // Error logs to separate file
-    new winston.transports.File({ 
+    new winston.transports.File({
       filename: path.resolve(errorLogFile),
       level: 'error',
       format: fileFormat,

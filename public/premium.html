@@ -1054,6 +1054,13 @@ input[type=color] { cursor: pointer; }
               <div class="flabel">Image URL</div>
               <input class="finput" id="eb-image" placeholder="https://…" oninput="liveEmbed()">
             </div>
+            <div class="frow">
+              <div class="flabel">Attach image files <span class="fsub">optional, multiple, up to 8MB each</span></div>
+              <input class="finput" type="file" id="eb-image-file" accept="image/*" multiple onchange="handleEmbedImageUpload(this)">
+              <div id="eb-image-file-name" style="margin-top:6px;color:var(--t3);font-size:12px">No image files attached.</div>
+              <div id="eb-image-file-list" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+              <button class="sbtn" type="button" style="margin-top:8px" onclick="clearEmbedImageUpload()">🧹 Remove all attached images</button>
+            </div>
           </div>
           <div class="csec">
             <div class="csec-hd">Fields <span class="badge">max 25</span></div>
@@ -2463,17 +2470,59 @@ async function deleteSchedule(id) {
 
 // ── EMBED BUILDER ─────────────────────────────────────────────────────────────
 let ebFields = [];
+let ebImageAttachments = [];
 
 function addEmbedField() {
   if (ebFields.length >= 25) { toast('Max 25 fields', 'err'); return; }
-  ebFields.push({ id: Date.now(), name:'', value:'', inline:false });
+  ebFields.push({ id: Date.now(), name:'', value:'', inline:false, imageUrl:'', imageAttachment:null });
   renderEmbedFields();
   liveEmbed();
 }
 function removeEmbedField(id) { ebFields = ebFields.filter(f => f.id !== id); renderEmbedFields(); liveEmbed(); }
 function updEbField(id, k, v) { const f = ebFields.find(x => x.id === id); if(f) { f[k]=v; liveEmbed(); } }
+
+async function handleFieldImageUpload(fieldId, input) {
+  const f = ebFields.find(x => x.id === fieldId);
+  const file = input?.files?.[0];
+  if (!f || !file) return;
+  if (!file.type.startsWith('image/')) {
+    toast(`Skipped ${file.name}: not an image file`, 'err');
+    input.value = '';
+    return;
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    toast(`Skipped ${file.name}: file must be 8MB or smaller`, 'err');
+    input.value = '';
+    return;
+  }
+
+  const dataUrl = await readFileAsDataUrl(file).catch((err) => {
+    toast(err.message, 'err');
+    return null;
+  });
+  if (!dataUrl) return;
+
+  f.imageAttachment = {
+    name: file.name,
+    mimeType: file.type,
+    dataUrl,
+  };
+  renderEmbedFields();
+  liveEmbed();
+}
+
+function clearFieldImage(fieldId) {
+  const f = ebFields.find(x => x.id === fieldId);
+  if (!f) return;
+  f.imageAttachment = null;
+  renderEmbedFields();
+  liveEmbed();
+}
+
 function renderEmbedFields() {
-  document.getElementById('eb-fields-list').innerHTML = ebFields.map(f => `
+  document.getElementById('eb-fields-list').innerHTML = ebFields.map(f => {
+    const fieldImageName = f.imageAttachment?.name || '';
+    return `
     <div class="mfield-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
         <span style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase">Field</span>
@@ -2483,8 +2532,91 @@ function renderEmbedFields() {
         <input class="finput" value="${esc(f.name)}" placeholder="Field name" oninput="updEbField(${f.id},'name',this.value)"></div>
       <div class="frow"><div class="flabel">Value</div>
         <textarea class="ftextarea" placeholder="Field value (new lines supported)" oninput="updEbField(${f.id},'value',this.value)">${esc(f.value)}</textarea></div>
+      <div class="frow"><div class="flabel">Field image URL <span class="fsub">optional</span></div>
+        <input class="finput" value="${esc(f.imageUrl||'')}" placeholder="https://…" oninput="updEbField(${f.id},'imageUrl',this.value)"></div>
+      <div class="frow"><div class="flabel">Attach field image <span class="fsub">optional</span></div>
+        <input class="finput" type="file" accept="image/*" onchange="handleFieldImageUpload(${f.id}, this)">
+        <div style="margin-top:6px;color:var(--t3);font-size:12px">${fieldImageName ? `Attached: ${esc(fieldImageName)}` : 'No field image attached.'}</div>
+        <button class="sbtn" type="button" style="margin-top:8px" onclick="clearFieldImage(${f.id})">🧹 Remove field image</button>
+      </div>
       <label class="crow"><input type="checkbox" ${f.inline?'checked':''} onchange="updEbField(${f.id},'inline',this.checked)"><label>Inline</label></label>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+async function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error(`Failed to read image: ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderEmbedImageAttachmentList() {
+  const nameLabel = document.getElementById('eb-image-file-name');
+  const listEl = document.getElementById('eb-image-file-list');
+  if (!nameLabel || !listEl) return;
+
+  if (!ebImageAttachments.length) {
+    nameLabel.textContent = 'No image files attached.';
+    listEl.innerHTML = '';
+    return;
+  }
+
+  nameLabel.textContent = `${ebImageAttachments.length} image file(s) attached.`;
+  listEl.innerHTML = ebImageAttachments.map((img, idx) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--bg1);border:1px solid var(--line);border-radius:8px;padding:7px 8px;">
+      <span style="font-size:12px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🖼 ${esc(img.name)}</span>
+      <button class="xbtn" type="button" onclick="removeEmbedImageAttachment(${idx})">×</button>
+    </div>
+  `).join('');
+}
+
+async function handleEmbedImageUpload(input) {
+  const files = Array.from(input?.files || []);
+  if (!files.length) return;
+
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) {
+      toast(`Skipped ${file.name}: not an image file`, 'err');
+      continue;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast(`Skipped ${file.name}: file must be 8MB or smaller`, 'err');
+      continue;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file).catch((err) => {
+      toast(err.message, 'err');
+      return null;
+    });
+    if (!dataUrl) continue;
+
+    ebImageAttachments.push({
+      name: file.name,
+      mimeType: file.type,
+      dataUrl,
+    });
+  }
+
+  input.value = '';
+  renderEmbedImageAttachmentList();
+  liveEmbed();
+}
+
+function removeEmbedImageAttachment(index) {
+  ebImageAttachments = ebImageAttachments.filter((_, idx) => idx !== index);
+  renderEmbedImageAttachmentList();
+  liveEmbed();
+}
+
+function clearEmbedImageUpload() {
+  ebImageAttachments = [];
+  const fileInput = document.getElementById('eb-image-file');
+  if (fileInput) fileInput.value = '';
+  renderEmbedImageAttachmentList();
+  liveEmbed();
 }
 
 function normalizeEmbedButtons() {
@@ -2513,14 +2645,18 @@ function getEmbedData() {
     timestamp:  document.getElementById('eb-ts').value === 'now' ? new Date().toISOString() : null,
     thumbnail:  document.getElementById('eb-thumb').value.trim(),
     image:      document.getElementById('eb-image').value.trim(),
-    fields:     ebFields
+    imageAttachments: ebImageAttachments,
+    fields:     ebFields.map(f => ({
+      ...f,
+      imageUrl: (f.imageUrl || '').trim(),
+    }))
   };
 }
 
 function liveEmbed() {
   const e   = getEmbedData();
   const el  = document.getElementById('eb-preview');
-  const any = e.title || e.description || e.author || e.fields.length || e.image || e.thumbnail;
+  const any = e.title || e.description || e.author || e.fields.length || e.image || e.thumbnail || e.imageAttachments.length;
   if (!any) {
     el.innerHTML = '<div style="color:var(--t3);font-size:13px;text-align:center;margin-top:60px">Start filling in fields to see your embed</div>';
     return;
@@ -2533,12 +2669,19 @@ function liveEmbed() {
     </div>` : '';
   const titleHtml = e.title ? `<div class="ep-title">${esc(e.title)}</div>` : '';
   const descHtml  = e.description ? `<div class="ep-desc">${esc(e.description)}</div>` : '';
-  const fieldsHtml = e.fields.length ? `<div class="ep-fields">${e.fields.map(f => `
+  const fieldsHtml = e.fields.length ? `<div class="ep-fields">${e.fields.map(f => {
+    const fImage = f.imageUrl || f.imageAttachment?.dataUrl || '';
+    return `
     <div class="ep-field" style="${f.inline?'flex:0 0 auto;min-width:100px':'flex:0 0 100%'}">
       <div class="ep-field-name">${esc(f.name)}</div>
       <div class="ep-field-value">${esc(f.value)}</div>
-    </div>`).join('')}</div>` : '';
-  const imageHtml = e.image ? `<img class="ep-image" src="${esc(e.image)}" onerror="this.style.display='none'">` : '';
+      ${fImage ? `<img src="${esc(fImage)}" style="margin-top:6px;max-width:100%;max-height:120px;border-radius:6px;border:1px solid var(--line);object-fit:cover" onerror="this.style.display='none'">` : ''}
+    </div>`;
+  }).join('')}</div>` : '';
+  const imageSrc = e.image || e.imageAttachments[0]?.dataUrl || '';
+  const imageHtml = imageSrc ? `<img class="ep-image" src="${esc(imageSrc)}" onerror="this.style.display='none'">` : '';
+  const extraImages = e.image ? e.imageAttachments : e.imageAttachments.slice(1);
+  const extraImagesHtml = extraImages.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${extraImages.map(img => `<span style="font-size:11px;color:var(--t3);padding:3px 6px;border:1px solid var(--line);border-radius:999px">🖼 ${esc(img.name)}</span>`).join('')}</div>` : '';
   const footerHtml = (e.footer || e.timestamp) ? `
     <div class="ep-footer">
       ${e.footer ? `<span>${esc(e.footer)}</span>` : ''}
@@ -2555,6 +2698,7 @@ function liveEmbed() {
       ${descHtml}
       ${fieldsHtml}
       ${imageHtml}
+      ${extraImagesHtml}
       ${footerHtml}
     </div>
     ${ebBtns.length ? `<div class="ep-btns">${normalizeEmbedButtons().map(b => {
@@ -2574,7 +2718,13 @@ async function sendEmbed() {
   try {
     const d = await api('/api/embed/send', {
       method:'POST',
-      body: JSON.stringify({ channel, embed: e, buttons: normalizeEmbedButtons(), content: e.content })
+      body: JSON.stringify({
+        channel,
+        embed: e,
+        buttons: normalizeEmbedButtons(),
+        content: e.content,
+        imageAttachments: e.imageAttachments
+      })
     }).then(r => r.json());
     toast(d.success ? `✅ Embed sent to #${channel}!` : (d.error || 'Failed'), d.success ? 'ok' : 'err');
   } catch(ex) { toast('Error: ' + ex.message, 'err'); }
@@ -2602,6 +2752,9 @@ function copyEmbedJSON() {
       ...(b.style === 'Link' ? { url: b.url } : { custom_id: b.customId })
     })) }] })
   };
+  if (e.imageAttachments.length) {
+    djsObj.__note = `This embed includes ${e.imageAttachments.length} attached image file(s) in the dashboard. JSON cannot include binary file data.`;
+  }
   navigator.clipboard.writeText(JSON.stringify(djsObj, null, 2));
   toast('📋 Embed JSON copied!', 'ok');
 }
@@ -2616,6 +2769,7 @@ function clearEmbed() {
   document.getElementById('eb-ts').value = '';
   ebFields = [];
   ebBtns = [];
+  clearEmbedImageUpload();
   renderEmbedFields();
   renderEmbedBtns();
   liveEmbed();
@@ -2653,6 +2807,8 @@ function renderEmbedBtns() {
         <input class="finput" value="${esc(b.customId||'')}" placeholder="btn_action" oninput="updEbBtn(${b.id},'customId',this.value)" ${b.style === 'Link' ? 'disabled' : ''}></div>
     </div>`).join('');
 }
+
+renderEmbedImageAttachmentList();
 
 function esc(s) {
   return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
