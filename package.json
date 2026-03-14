@@ -13,7 +13,9 @@
     "logs": "tail -f logs/bot.log",
     "errors": "tail -f logs/error.log",
     "dashboard": "node dashboard-premium.js",
-    "dashboard-premium": "node dashboard-premium.js"
+    "dashboard-premium": "node dashboard-premium.js",
+    "quality:check": "node scripts-code-quality.js",
+    "quality:fix": "node scripts-code-quality.js --fix"
   },
   "keywords": [
     "discord",

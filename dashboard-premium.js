@@ -1313,7 +1313,7 @@ ${acts}
 // ── Embed Send ────────────────────────────────────────────────────────────────
 app.post('/api/embed/send', auth, async (req, res) => {
   try {
-    const { channel: channelInput, embed, buttons = [], content = '' } = req.body;
+    const { channel: channelInput, embed, buttons = [], content = '', imageAttachment = null, imageAttachments = [] } = req.body;
     if (!channelInput) return res.status(400).json({ error: 'channel is required' });
     if (!TOKEN)        return res.status(500).json({ error: 'DISCORD_TOKEN not configured' });
     if (!GUILD_IDS.length) return res.status(500).json({ error: 'GUILD_IDS not configured' });
@@ -1333,6 +1333,59 @@ app.post('/api/embed/send', auth, async (req, res) => {
 
     if (!channelId) return res.status(404).json({ error: `Channel "${channelInput}" not found in any configured guild` });
 
+    const rawAttachments = [
+      ...(imageAttachment?.dataUrl ? [imageAttachment] : []),
+      ...(Array.isArray(imageAttachments) ? imageAttachments : []),
+    ];
+
+    if (rawAttachments.length > 10) {
+      return res.status(400).json({ error: 'Maximum 10 attached images are allowed per embed message' });
+    }
+
+    const extMap = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+    };
+
+    const attachedImageFiles = [];
+    for (let idx = 0; idx < rawAttachments.length; idx++) {
+      const item = rawAttachments[idx];
+      if (!item?.dataUrl) continue;
+
+      const dataUrlMatch = String(item.dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!dataUrlMatch) {
+        return res.status(400).json({ error: `Invalid image attachment format at position ${idx + 1}` });
+      }
+
+      const base64Payload = dataUrlMatch[2];
+      const imageBuffer = Buffer.from(base64Payload, 'base64');
+      if (!imageBuffer.length) {
+        return res.status(400).json({ error: `Uploaded image ${idx + 1} is empty` });
+      }
+      if (imageBuffer.length > 8 * 1024 * 1024) {
+        return res.status(400).json({ error: `Attached image ${idx + 1} must be 8MB or smaller` });
+      }
+
+      const mimeType = dataUrlMatch[1].toLowerCase();
+      const ext = extMap[mimeType];
+      if (!ext) {
+        return res.status(400).json({ error: 'Only PNG/JPG/GIF/WEBP images are supported' });
+      }
+
+      const safeBaseName = String(item.name || `embed-image-${idx + 1}`)
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .slice(0, 48) || `embed-image-${idx + 1}`;
+
+      attachedImageFiles.push({
+        name: `${safeBaseName}-${idx + 1}.${ext}`,
+        data: imageBuffer,
+      });
+    }
+
     const discordEmbed = {};
     if (embed.title)       discordEmbed.title       = embed.title;
     if (embed.description) discordEmbed.description = embed.description;
@@ -1342,10 +1395,12 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (embed.timestamp === 'current') discordEmbed.timestamp = new Date().toISOString();
     if (embed.thumbnail)   discordEmbed.thumbnail    = { url: embed.thumbnail };
     if (embed.image)       discordEmbed.image        = { url: embed.image };
+    if (!embed.image && attachedImageFiles.length) discordEmbed.image = { url: `attachment://${attachedImageFiles[0].name}` };
     if (embed.fields?.length) discordEmbed.fields   = embed.fields.map(f => ({ name: f.name, value: f.value, inline: !!f.inline }));
 
     const payload = { embeds: [discordEmbed] };
     if (content) payload.content = content;
+    const files = attachedImageFiles.length ? attachedImageFiles : undefined;
 
     if (buttons.length) {
       payload.components = [{
@@ -1359,7 +1414,7 @@ app.post('/api/embed/send', auth, async (req, res) => {
       }];
     }
 
-    await rest.post(Routes.channelMessages(channelId), { body: payload });
+    await rest.post(Routes.channelMessages(channelId), files ? { body: payload, files } : { body: payload });
     res.json({ ok: true, channelId });
   } catch (err) {
     console.error('[embed/send]', err);

@@ -12,7 +12,7 @@ module.exports = {
     description: 'Fetch all messages with thumbsup/thumbsdown reaction counts from a channel',
     defaultMemberPermissions: PermissionFlagsBits.ManageMessages,
     configure: builder => builder
-      .addChannelOption(o => 
+      .addChannelOption(o =>
         o.setName('channel')
           .setDescription('Channel to fetch reactions from (defaults to current channel)')
           .setRequired(false))
@@ -23,9 +23,9 @@ module.exports = {
           .setMinValue(0)
           .setMaxValue(10000)),
   }),
-  
+
   cooldown: 30,
-  
+
   async execute(interaction, client, logger) {
     await interaction.deferReply(); // Not ephemeral - file needs to be visible
 
@@ -153,8 +153,8 @@ module.exports = {
       } catch (dmErr) {
         // DM failed, send in channel (make sure it's NOT ephemeral)
         try {
-          await interaction.followUp({ 
-            content: `${interaction.user}\n\n${summary}`, 
+          await interaction.followUp({
+            content: `${interaction.user}\n\n${summary}`,
             files: [attachment],
             ephemeral: false  // Make sure file is visible to everyone
           });
@@ -170,7 +170,7 @@ module.exports = {
     } catch (err) {
       console.error('fetchreactions error:', err);
       logger?.error?.(`fetchreactions error: ${err.message}`);
-      
+
       try {
         await interaction.editReply(`❌ Error: ${err.message}`);
       } catch (editErr) {

@@ -199,16 +199,16 @@ module.exports = {
 
     // Try to send via DM first
     try {
-      await interaction.user.send({ 
+      await interaction.user.send({
         content: summary,
-        files: [attachment] 
+        files: [attachment]
       });
       await interaction.editReply(`✅ ${summary}\n\nSent to your DMs!`);
     } catch (dmErr) {
       // DM failed, attach to reply in channel
-      await interaction.editReply({ 
-        content: `✅ ${summary}\n\n⚠️ Couldn't send DM (disabled?). File attached below:`, 
-        files: [attachment] 
+      await interaction.editReply({
+        content: `✅ ${summary}\n\n⚠️ Couldn't send DM (disabled?). File attached below:`,
+        files: [attachment]
       });
     }
   }
