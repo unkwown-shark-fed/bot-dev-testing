@@ -99,18 +99,18 @@ module.exports = {
 
     // Try to send via DM first
     try {
-      await interaction.user.send({ 
+      await interaction.user.send({
         content: 'Role management results:',
-        embeds: [embed], 
-        files: [attachment] 
+        embeds: [embed],
+        files: [attachment]
       });
       await interaction.editReply(`✅ Operation complete! Results sent to your DMs.\n\n${successCount} successful, ${failed} failed.`);
     } catch (dmErr) {
       // DM failed, attach to reply in channel
-      await interaction.editReply({ 
+      await interaction.editReply({
         content: '✅ Operation complete! ⚠️ Couldn\'t send DM (disabled?). Results below:',
-        embeds: [embed], 
-        files: [attachment] 
+        embeds: [embed],
+        files: [attachment]
       });
     }
   }
