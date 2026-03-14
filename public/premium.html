@@ -1188,7 +1188,6 @@ async function login() {
   const pwInput = document.getElementById('lpw');
   const errEl = document.getElementById('lerr');
   const btn = document.getElementById('loginBtn') || document.querySelector('.lbtn');
-  const btn = document.querySelector('.lbtn');
   const pw = (pwInput?.value || '').trim();
 
   if (!pw) {
@@ -1232,7 +1231,6 @@ async function login() {
 document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); login(); } });
 const loginBtnEl = document.getElementById('loginBtn');
 if (loginBtnEl) loginBtnEl.addEventListener('click', (e) => { e.preventDefault(); login(); });
-document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 function logout() { TOK = null; localStorage.removeItem('bst'); location.reload(); }
 
 function api(url, o = {}) {
@@ -2748,35 +2746,33 @@ function normalizeEmbedButtons() {
 
 function getEmbedData() {
   return {
-    content:    document.getElementById('eb-content').value.trim(),
-    title:      document.getElementById('eb-title').value.trim(),
-    description:document.getElementById('eb-desc').value.trim(),
-    color:      document.getElementById('eb-color').value || '#6c63ff',
-    author:     document.getElementById('eb-author').value.trim(),
+    content: document.getElementById('eb-content').value.trim(),
+    title: document.getElementById('eb-title').value.trim(),
+    description: document.getElementById('eb-desc').value.trim(),
+    color: document.getElementById('eb-color').value || '#6c63ff',
+    author: document.getElementById('eb-author').value.trim(),
     authorIcon: document.getElementById('eb-authoricon').value.trim(),
-    footer:     document.getElementById('eb-footer').value.trim(),
-    timestamp:  document.getElementById('eb-ts').value === 'now' ? new Date().toISOString() : null,
-    thumbnail:  document.getElementById('eb-thumb').value.trim(),
-    image:      document.getElementById('eb-image').value.trim(),
+    footer: document.getElementById('eb-footer').value.trim(),
+    timestamp: document.getElementById('eb-ts').value === 'now' ? new Date().toISOString() : null,
+    thumbnail: document.getElementById('eb-thumb').value.trim(),
+    image: document.getElementById('eb-image').value.trim(),
     imageAttachments: ebImageAttachments,
-    fields:     ebFields.map(f => ({
+    fields: ebFields.map(f => ({
       ...f,
       imageUrl: (f.imageUrl || '').trim(),
-    }))
-    imageAttachment: ebImageAttachment,
-    fields:     ebFields
+    })),
   };
 }
 
 function liveEmbed() {
-  const e   = getEmbedData();
-  const el  = document.getElementById('eb-preview');
+  const e = getEmbedData();
+  const el = document.getElementById('eb-preview');
   const any = e.title || e.description || e.author || e.fields.length || e.image || e.thumbnail || e.imageAttachments.length;
-  const any = e.title || e.description || e.author || e.fields.length || e.image || e.thumbnail || e.imageAttachment;
   if (!any) {
     el.innerHTML = '<div style="color:var(--t3);font-size:13px;text-align:center;margin-top:60px">Start filling in fields to see your embed</div>';
     return;
   }
+
   const thumbHtml = e.thumbnail ? `<img class="ep-thumb" src="${esc(e.thumbnail)}" onerror="this.style.display='none'">` : '';
   const authorHtml = e.author ? `
     <div class="ep-author">
@@ -2784,11 +2780,11 @@ function liveEmbed() {
       <span class="ep-author-name">${esc(e.author)}</span>
     </div>` : '';
   const titleHtml = e.title ? `<div class="ep-title">${esc(e.title)}</div>` : '';
-  const descHtml  = e.description ? `<div class="ep-desc">${esc(e.description)}</div>` : '';
+  const descHtml = e.description ? `<div class="ep-desc">${esc(e.description)}</div>` : '';
   const fieldsHtml = e.fields.length ? `<div class="ep-fields">${e.fields.map(f => {
     const fImage = f.imageUrl || f.imageAttachment?.dataUrl || '';
     return `
-    <div class="ep-field" style="${f.inline?'flex:0 0 auto;min-width:100px':'flex:0 0 100%'}">
+    <div class="ep-field" style="${f.inline ? 'flex:0 0 auto;min-width:100px' : 'flex:0 0 100%'}">
       <div class="ep-field-name">${esc(f.name)}</div>
       <div class="ep-field-value">${esc(f.value)}</div>
       ${fImage ? `<img src="${esc(fImage)}" style="margin-top:6px;max-width:100%;max-height:120px;border-radius:6px;border:1px solid var(--line);object-fit:cover" onerror="this.style.display='none'">` : ''}
@@ -2798,9 +2794,6 @@ function liveEmbed() {
   const imageHtml = imageSrc ? `<img class="ep-image" src="${esc(imageSrc)}" onerror="this.style.display='none'">` : '';
   const extraImages = e.image ? e.imageAttachments : e.imageAttachments.slice(1);
   const extraImagesHtml = extraImages.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${extraImages.map(img => `<span style="font-size:11px;color:var(--t3);padding:3px 6px;border:1px solid var(--line);border-radius:999px">🖼 ${esc(img.name)}</span>`).join('')}</div>` : '';
-    </div>`).join('')}</div>` : '';
-  const imageSrc = e.image || e.imageAttachment?.dataUrl || '';
-  const imageHtml = imageSrc ? `<img class="ep-image" src="${esc(imageSrc)}" onerror="this.style.display='none'">` : '';
   const footerHtml = (e.footer || e.timestamp) ? `
     <div class="ep-footer">
       ${e.footer ? `<span>${esc(e.footer)}</span>` : ''}
@@ -2842,11 +2835,10 @@ async function sendEmbed() {
         embed: e,
         buttons: normalizeEmbedButtons(),
         content: e.content,
-        imageAttachments: e.imageAttachments
-        imageAttachment: e.imageAttachment
+        imageAttachments: e.imageAttachments,
       })
     }).then(r => r.json());
-    toast(d.success ? `✅ Embed sent to #${channel}!` : (d.error || 'Failed'), d.success ? 'ok' : 'err');
+    toast((d.ok || d.success) ? `✅ Embed sent to #${channel}!` : (d.error || 'Failed'), (d.ok || d.success) ? 'ok' : 'err');
   } catch(ex) { toast('Error: ' + ex.message, 'err'); }
 }
 
@@ -2874,8 +2866,6 @@ function copyEmbedJSON() {
   };
   if (e.imageAttachments.length) {
     djsObj.__note = `This embed includes ${e.imageAttachments.length} attached image file(s) in the dashboard. JSON cannot include binary file data.`;
-  if (e.imageAttachment) {
-    djsObj.__note = 'This embed includes an attached image file in the dashboard. JSON cannot include binary file data.';
   }
   navigator.clipboard.writeText(JSON.stringify(djsObj, null, 2));
   toast('📋 Embed JSON copied!', 'ok');
