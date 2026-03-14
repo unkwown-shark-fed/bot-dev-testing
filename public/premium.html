@@ -1179,25 +1179,65 @@ function sanitizeCmdName(input) {
 }
 
 // ── AUTH ───────────────────────────────────────────────────────────────────
-function login() {
-  const pw = document.getElementById('lpw').value;
-  api('/api/login', { method:'POST', body: JSON.stringify({ password: pw }) })
-    .then(r => r.json()).then(d => {
-      if (d.success) { TOK = d.token; localStorage.setItem('bst', TOK); showApp(); }
-      else document.getElementById('lerr').textContent = 'Incorrect password';
-    }).catch(() => { document.getElementById('lerr').textContent = 'Connection failed'; });
+async function login() {
+  const pwInput = document.getElementById('lpw');
+  const errEl = document.getElementById('lerr');
+  const btn = document.querySelector('.lbtn');
+  const pw = (pwInput?.value || '').trim();
+
+  if (!pw) {
+    errEl.textContent = 'Enter dashboard password first';
+    return;
+  }
+
+  errEl.textContent = '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+  }
+
+  try {
+    const r = await api('/api/login', {
+      method:'POST',
+      body: JSON.stringify({ password: pw }),
+      skipAuth: true,
+    });
+
+    let d = null;
+    try { d = await r.json(); } catch (_) {}
+
+    if (!r.ok || !d?.success) {
+      errEl.textContent = d?.error || 'Incorrect password';
+      return;
+    }
+
+    TOK = d.token;
+    localStorage.setItem('bst', TOK);
+    showApp();
+  } catch (_) {
+    errEl.textContent = 'Connection failed';
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Enter Studio →';
+    }
+  }
 }
 document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-function logout() { localStorage.removeItem('bst'); location.reload(); }
+function logout() { TOK = null; localStorage.removeItem('bst'); location.reload(); }
 
 function api(url, o = {}) {
-  return fetch(url, { ...o, headers: { 'Authorization': `Bearer ${TOK}`, 'Content-Type': 'application/json', ...(o.headers||{}) } });
+  const headers = { 'Content-Type': 'application/json', ...(o.headers||{}) };
+  if (!o.skipAuth && TOK) headers.Authorization = `Bearer ${TOK}`;
+  const { skipAuth, ...opts } = o;
+  return fetch(url, { ...opts, headers });
 }
 
 // ── APP INIT ───────────────────────────────────────────────────────────────
 function showApp() {
   document.getElementById('ls').style.display = 'none';
   document.getElementById('app').classList.add('on');
+  document.getElementById('app').style.display = 'flex';
   syncBuilderPanels();
   wsConnect();
   tick();
@@ -1208,7 +1248,22 @@ function showApp() {
 }
 
 if (TOK) {
-  api('/api/status').then(r => { if (r.ok) showApp(); else { TOK = null; localStorage.removeItem('bst'); } });
+  const snapshot = TOK;
+  api('/api/status').then(r => {
+    if (r.ok) {
+      showApp();
+      return;
+    }
+    if (TOK === snapshot) {
+      TOK = null;
+      localStorage.removeItem('bst');
+    }
+  }).catch(() => {
+    if (TOK === snapshot) {
+      TOK = null;
+      localStorage.removeItem('bst');
+    }
+  });
 }
 
 // ── NAV ────────────────────────────────────────────────────────────────────
