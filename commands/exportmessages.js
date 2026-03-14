@@ -251,9 +251,9 @@ module.exports = {
 
     // Try to send via DM first
     try {
-      await interaction.user.send({ 
+      await interaction.user.send({
         content: `${summary}\n\nExported messages CSV attached.`,
-        files: [attachment] 
+        files: [attachment]
       });
       await interaction.editReply(`✅ ${summary}\n\nExport sent to your DMs!`);
     } catch (dmErr) {
