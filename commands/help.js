@@ -8,7 +8,7 @@ module.exports = {
   cooldown: 5,
   async execute(interaction) {
     const commands = interaction.client.commands;
-    
+
     const categories = {
       '📊 Utility': ['ping', 'help', 'serverinfo', 'userinfo', 'status'],
       '📤 Export': ['export', 'exportmessages', 'exportinvites', 'fetchreactions'],

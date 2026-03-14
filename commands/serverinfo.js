@@ -9,18 +9,18 @@ module.exports = {
   async execute(interaction) {
     const guild = interaction.guild;
     const owner = await guild.fetchOwner();
-    
+
     const createdTimestamp = Math.floor(guild.createdTimestamp / 1000);
-    
+
     // Count channels by type
     const textChannels = guild.channels.cache.filter(c => c.type === 0).size;
     const voiceChannels = guild.channels.cache.filter(c => c.type === 2).size;
     const categories = guild.channels.cache.filter(c => c.type === 4).size;
-    
+
     // Count bots
     const bots = guild.members.cache.filter(m => m.user.bot).size;
     const humans = guild.memberCount - bots;
-    
+
     const embed = createEmbed({
       title: `📊 ${guild.name}`,
       thumbnail: guild.iconURL({ size: 256 }),
@@ -38,15 +38,15 @@ module.exports = {
         { name: '🔒 Verification', value: guild.verificationLevel.toString(), inline: true }
       )
       .setTimestamp();
-    
+
     if (guild.description) {
       embed.setDescription(guild.description);
     }
-    
+
     if (guild.banner) {
       embed.setImage(guild.bannerURL({ size: 1024 }));
     }
-    
+
     await interaction.reply({ embeds: [embed] });
   }
 };
