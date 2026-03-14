@@ -2613,6 +2613,7 @@ function liveEmbed() {
       ${descHtml}
       ${fieldsHtml}
       ${imageHtml}
+      ${extraImagesHtml}
       ${footerHtml}
     </div>
     ${ebBtns.length ? `<div class="ep-btns">${normalizeEmbedButtons().map(b => {
@@ -2721,6 +2722,8 @@ function renderEmbedBtns() {
         <input class="finput" value="${esc(b.customId||'')}" placeholder="btn_action" oninput="updEbBtn(${b.id},'customId',this.value)" ${b.style === 'Link' ? 'disabled' : ''}></div>
     </div>`).join('');
 }
+
+renderEmbedImageAttachmentList();
 
 function esc(s) {
   return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
