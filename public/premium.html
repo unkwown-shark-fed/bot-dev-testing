@@ -537,7 +537,7 @@ input[type=color] { cursor: pointer; }
     <label class="lf-label" for="lpw">Dashboard Password</label>
     <input class="lf-input" type="password" id="lpw" placeholder="Enter password" autocomplete="current-password">
     <div class="lerr" id="lerr"></div>
-    <button class="lbtn" onclick="login()">Enter Studio →</button>
+    <button class="lbtn" id="loginBtn" type="button">Enter Studio →</button>
   </div>
 </div>
 
@@ -1055,6 +1055,11 @@ input[type=color] { cursor: pointer; }
               <input class="finput" id="eb-image" placeholder="https://…" oninput="liveEmbed()">
             </div>
             <div class="frow">
+              <div class="flabel">Attach image files <span class="fsub">optional, multiple, up to 8MB each</span></div>
+              <input class="finput" type="file" id="eb-image-file" accept="image/*" multiple onchange="handleEmbedImageUpload(this)">
+              <div id="eb-image-file-name" style="margin-top:6px;color:var(--t3);font-size:12px">No image files attached.</div>
+              <div id="eb-image-file-list" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+              <button class="sbtn" type="button" style="margin-top:8px" onclick="clearEmbedImageUpload()">🧹 Remove all attached images</button>
               <div class="flabel">Attach image file <span class="fsub">optional, up to 8MB</span></div>
               <input class="finput" type="file" id="eb-image-file" accept="image/*" onchange="handleEmbedImageUpload(this)">
               <div id="eb-image-file-name" style="margin-top:6px;color:var(--t3);font-size:12px">No image file attached.</div>
@@ -1182,6 +1187,7 @@ function sanitizeCmdName(input) {
 async function login() {
   const pwInput = document.getElementById('lpw');
   const errEl = document.getElementById('lerr');
+  const btn = document.getElementById('loginBtn') || document.querySelector('.lbtn');
   const btn = document.querySelector('.lbtn');
   const pw = (pwInput?.value || '').trim();
 
@@ -1223,6 +1229,9 @@ async function login() {
     }
   }
 }
+document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); login(); } });
+const loginBtnEl = document.getElementById('loginBtn');
+if (loginBtnEl) loginBtnEl.addEventListener('click', (e) => { e.preventDefault(); login(); });
 document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 function logout() { TOK = null; localStorage.removeItem('bst'); location.reload(); }
 
@@ -2524,6 +2533,7 @@ async function deleteSchedule(id) {
 
 // ── EMBED BUILDER ─────────────────────────────────────────────────────────────
 let ebFields = [];
+let ebImageAttachments = [];
 let ebImageAttachment = null;
 
 function addEmbedField() {
@@ -2748,6 +2758,11 @@ function getEmbedData() {
     timestamp:  document.getElementById('eb-ts').value === 'now' ? new Date().toISOString() : null,
     thumbnail:  document.getElementById('eb-thumb').value.trim(),
     image:      document.getElementById('eb-image').value.trim(),
+    imageAttachments: ebImageAttachments,
+    fields:     ebFields.map(f => ({
+      ...f,
+      imageUrl: (f.imageUrl || '').trim(),
+    }))
     imageAttachment: ebImageAttachment,
     fields:     ebFields
   };
@@ -2756,6 +2771,7 @@ function getEmbedData() {
 function liveEmbed() {
   const e   = getEmbedData();
   const el  = document.getElementById('eb-preview');
+  const any = e.title || e.description || e.author || e.fields.length || e.image || e.thumbnail || e.imageAttachments.length;
   const any = e.title || e.description || e.author || e.fields.length || e.image || e.thumbnail || e.imageAttachment;
   if (!any) {
     el.innerHTML = '<div style="color:var(--t3);font-size:13px;text-align:center;margin-top:60px">Start filling in fields to see your embed</div>';
@@ -2775,6 +2791,13 @@ function liveEmbed() {
     <div class="ep-field" style="${f.inline?'flex:0 0 auto;min-width:100px':'flex:0 0 100%'}">
       <div class="ep-field-name">${esc(f.name)}</div>
       <div class="ep-field-value">${esc(f.value)}</div>
+      ${fImage ? `<img src="${esc(fImage)}" style="margin-top:6px;max-width:100%;max-height:120px;border-radius:6px;border:1px solid var(--line);object-fit:cover" onerror="this.style.display='none'">` : ''}
+    </div>`;
+  }).join('')}</div>` : '';
+  const imageSrc = e.image || e.imageAttachments[0]?.dataUrl || '';
+  const imageHtml = imageSrc ? `<img class="ep-image" src="${esc(imageSrc)}" onerror="this.style.display='none'">` : '';
+  const extraImages = e.image ? e.imageAttachments : e.imageAttachments.slice(1);
+  const extraImagesHtml = extraImages.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${extraImages.map(img => `<span style="font-size:11px;color:var(--t3);padding:3px 6px;border:1px solid var(--line);border-radius:999px">🖼 ${esc(img.name)}</span>`).join('')}</div>` : '';
     </div>`).join('')}</div>` : '';
   const imageSrc = e.image || e.imageAttachment?.dataUrl || '';
   const imageHtml = imageSrc ? `<img class="ep-image" src="${esc(imageSrc)}" onerror="this.style.display='none'">` : '';
@@ -2819,6 +2842,7 @@ async function sendEmbed() {
         embed: e,
         buttons: normalizeEmbedButtons(),
         content: e.content,
+        imageAttachments: e.imageAttachments
         imageAttachment: e.imageAttachment
       })
     }).then(r => r.json());
@@ -2848,6 +2872,8 @@ function copyEmbedJSON() {
       ...(b.style === 'Link' ? { url: b.url } : { custom_id: b.customId })
     })) }] })
   };
+  if (e.imageAttachments.length) {
+    djsObj.__note = `This embed includes ${e.imageAttachments.length} attached image file(s) in the dashboard. JSON cannot include binary file data.`;
   if (e.imageAttachment) {
     djsObj.__note = 'This embed includes an attached image file in the dashboard. JSON cannot include binary file data.';
   }

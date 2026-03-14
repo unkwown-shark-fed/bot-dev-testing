@@ -1313,6 +1313,7 @@ ${acts}
 // ── Embed Send ────────────────────────────────────────────────────────────────
 app.post('/api/embed/send', auth, async (req, res) => {
   try {
+    const { channel: channelInput, embed, buttons = [], content = '', imageAttachment = null, imageAttachments = [] } = req.body;
     const { channel: channelInput, embed, buttons = [], content = '', imageAttachment = null } = req.body;
     if (!channelInput) return res.status(400).json({ error: 'channel is required' });
     if (!TOKEN)        return res.status(500).json({ error: 'DISCORD_TOKEN not configured' });
@@ -1333,6 +1334,39 @@ app.post('/api/embed/send', auth, async (req, res) => {
 
     if (!channelId) return res.status(404).json({ error: `Channel "${channelInput}" not found in any configured guild` });
 
+    const fieldAttachmentEntries = Array.isArray(embed?.fields)
+      ? embed.fields
+          .map((f, idx) => ({ index: idx, attachment: f?.imageAttachment || null }))
+          .filter(x => x.attachment?.dataUrl)
+      : [];
+
+    const rawAttachments = [
+      ...(imageAttachment?.dataUrl ? [{ source: 'embed', fieldIndex: null, attachment: imageAttachment }] : []),
+      ...(Array.isArray(imageAttachments) ? imageAttachments.map(att => ({ source: 'embed', fieldIndex: null, attachment: att })) : []),
+      ...fieldAttachmentEntries.map(entry => ({ source: 'field', fieldIndex: entry.index, attachment: entry.attachment })),
+    ];
+
+    if (rawAttachments.length > 10) {
+      return res.status(400).json({ error: 'Maximum 10 attached images are allowed per embed message' });
+    }
+
+    const extMap = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+    };
+
+    const attachedImageFiles = [];
+    for (let idx = 0; idx < rawAttachments.length; idx++) {
+      const item = rawAttachments[idx];
+      const att = item?.attachment;
+      if (!att?.dataUrl) continue;
+
+      const dataUrlMatch = String(att.dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!dataUrlMatch) {
+        return res.status(400).json({ error: `Invalid image attachment format at position ${idx + 1}` });
     let attachedImageFile = null;
     if (imageAttachment?.dataUrl) {
       const dataUrlMatch = String(imageAttachment.dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -1343,6 +1377,13 @@ app.post('/api/embed/send', auth, async (req, res) => {
       const base64Payload = dataUrlMatch[2];
       const imageBuffer = Buffer.from(base64Payload, 'base64');
       if (!imageBuffer.length) {
+        return res.status(400).json({ error: `Uploaded image ${idx + 1} is empty` });
+      }
+      if (imageBuffer.length > 8 * 1024 * 1024) {
+        return res.status(400).json({ error: `Attached image ${idx + 1} must be 8MB or smaller` });
+      }
+
+      const mimeType = dataUrlMatch[1].toLowerCase();
         return res.status(400).json({ error: 'Uploaded image is empty' });
       }
       if (imageBuffer.length > 8 * 1024 * 1024) {
@@ -1362,6 +1403,17 @@ app.post('/api/embed/send', auth, async (req, res) => {
         return res.status(400).json({ error: 'Only PNG/JPG/GIF/WEBP images are supported' });
       }
 
+      const safeBaseName = String(att.name || `embed-image-${idx + 1}`)
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .slice(0, 48) || `embed-image-${idx + 1}`;
+
+      attachedImageFiles.push({
+        source: item.source || 'embed',
+        fieldIndex: item.fieldIndex,
+        name: `${safeBaseName}-${idx + 1}.${ext}`,
+        data: imageBuffer,
+      });
       const safeBaseName = String(imageAttachment.name || 'embed-image')
         .replace(/\.[^.]+$/, '')
         .replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -1382,6 +1434,28 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (embed.timestamp === 'current') discordEmbed.timestamp = new Date().toISOString();
     if (embed.thumbnail)   discordEmbed.thumbnail    = { url: embed.thumbnail };
     if (embed.image)       discordEmbed.image        = { url: embed.image };
+    const embedLevelFile = attachedImageFiles.find(f => f.source === 'embed');
+    if (!embed.image && embedLevelFile) discordEmbed.image = { url: `attachment://${embedLevelFile.name}` };
+    if (embed.fields?.length) {
+      discordEmbed.fields = embed.fields.map((f, idx) => {
+        const fieldFile = attachedImageFiles.find(x => x.source === 'field' && x.fieldIndex === idx);
+        const fieldImageLink = f.imageUrl
+          ? `
+🖼 [View image](${f.imageUrl})`
+          : (fieldFile ? `
+🖼 [View image](attachment://${fieldFile.name})` : '');
+        const baseValue = String(f.value || '').trim() || '​';
+        return {
+          name: f.name,
+          value: `${baseValue}${fieldImageLink}`,
+          inline: !!f.inline,
+        };
+      });
+    }
+
+    const payload = { embeds: [discordEmbed] };
+    if (content) payload.content = content;
+    const files = attachedImageFiles.length ? attachedImageFiles.map(({ name, data }) => ({ name, data })) : undefined;
     if (!embed.image && attachedImageFile) discordEmbed.image = { url: `attachment://${attachedImageFile.name}` };
     if (embed.fields?.length) discordEmbed.fields   = embed.fields.map(f => ({ name: f.name, value: f.value, inline: !!f.inline }));
 
