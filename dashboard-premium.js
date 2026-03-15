@@ -1334,9 +1334,14 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (!channelId) return res.status(404).json({ error: `Channel "${channelInput}" not found in any configured guild` });
 
     const fieldAttachmentEntries = Array.isArray(embed?.fields)
-      ? embed.fields
-          .map((f, idx) => ({ index: idx, attachment: f?.imageAttachment || null }))
-          .filter(x => x.attachment?.dataUrl)
+      ? embed.fields.flatMap((f, idx) => {
+          const attachments = Array.isArray(f?.imageAttachments)
+            ? f.imageAttachments
+            : (f?.imageAttachment ? [f.imageAttachment] : []);
+          return attachments
+            .map(att => ({ index: idx, attachment: att }))
+            .filter(x => x.attachment?.dataUrl);
+        })
       : [];
 
     const rawAttachments = [
@@ -1409,12 +1414,20 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (!embed.image && embedLevelFile) discordEmbed.image = { url: `attachment://${embedLevelFile.name}` };
     if (embed.fields?.length) {
       discordEmbed.fields = embed.fields.map((f, idx) => {
-        const fieldFile = attachedImageFiles.find(x => x.source === 'field' && x.fieldIndex === idx);
-        const fieldImageLink = f.imageUrl
-          ? `
-🖼 [View image](${f.imageUrl})`
-          : (fieldFile ? `
-🖼 [View image](attachment://${fieldFile.name})` : '');
+        const fieldFiles = attachedImageFiles.filter(x => x.source === 'field' && x.fieldIndex === idx);
+        const parsedUrls = Array.isArray(f.imageUrls)
+          ? f.imageUrls
+          : String(f.imageUrl || '')
+              .split(/[\n,]/)
+              .map(url => String(url || '').trim())
+              .filter(Boolean);
+        const imageLinks = [
+          ...parsedUrls,
+          ...fieldFiles.map(file => `attachment://${file.name}`),
+        ];
+        const fieldImageLink = imageLinks.length
+          ? `\n${imageLinks.map((url, imageIdx) => `🖼 [View image ${imageIdx + 1}](${url})`).join('\n')}`
+          : '';
         const baseValue = String(f.value || '').trim() || '​';
         return {
           name: f.name,
