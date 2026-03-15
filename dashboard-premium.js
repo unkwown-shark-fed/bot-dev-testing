@@ -1412,6 +1412,7 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (embed.image)       discordEmbed.image        = { url: embed.image };
     const embedLevelFile = attachedImageFiles.find(f => f.source === 'embed');
     if (!embed.image && embedLevelFile) discordEmbed.image = { url: `attachment://${embedLevelFile.name}` };
+    const fieldImageEmbeds = [];
     if (embed.fields?.length) {
       discordEmbed.fields = embed.fields.map((f, idx) => {
         const fieldFiles = attachedImageFiles.filter(x => x.source === 'field' && x.fieldIndex === idx);
@@ -1421,24 +1422,41 @@ app.post('/api/embed/send', auth, async (req, res) => {
               .split(/[\n,]/)
               .map(url => String(url || '').trim())
               .filter(Boolean);
-        const imageLinks = [
+
+        const imageSources = [
           ...parsedUrls,
           ...fieldFiles.map(file => `attachment://${file.name}`),
         ];
-        const fieldImageLink = imageLinks.length
-          ? `\n${imageLinks.map((url, imageIdx) => `🖼 [View image ${imageIdx + 1}](${url})`).join('\n')}`
-          : '';
+
+        imageSources.forEach((imgSrc, imageIdx) => {
+          fieldImageEmbeds.push({
+            color: discordEmbed.color,
+            title: f.name ? `${f.name} — Image ${imageIdx + 1}` : `Field image ${idx + 1}.${imageIdx + 1}`,
+            image: { url: imgSrc },
+          });
+        });
+
         const baseValue = String(f.value || '').trim() || '​';
         return {
           name: f.name,
-          value: `${baseValue}${fieldImageLink}`,
+          value: baseValue,
           inline: !!f.inline,
         };
       });
     }
 
-    const payload = { embeds: [discordEmbed] };
-    if (content) payload.content = content;
+    const maxExtraEmbeds = 9;
+    const limitedFieldImageEmbeds = fieldImageEmbeds.slice(0, maxExtraEmbeds);
+    const omittedFieldImageCount = Math.max(0, fieldImageEmbeds.length - limitedFieldImageEmbeds.length);
+
+    const payload = { embeds: [discordEmbed, ...limitedFieldImageEmbeds] };
+    if (content || omittedFieldImageCount) {
+      const trimmed = String(content || '').trim();
+      const omittedNote = omittedFieldImageCount
+        ? `\n⚠️ ${omittedFieldImageCount} field image(s) were omitted because Discord allows max 10 embeds per message.`
+        : '';
+      payload.content = `${trimmed}${omittedNote}`.trim();
+    }
     const files = attachedImageFiles.length ? attachedImageFiles.map(({ name, data }) => ({ name, data })) : undefined;
 
 

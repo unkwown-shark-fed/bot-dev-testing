@@ -2593,9 +2593,9 @@ function renderEmbedFields() {
         <input class="finput" value="${esc(f.name)}" placeholder="Field name" oninput="updEbField(${f.id},'name',this.value)"></div>
       <div class="frow"><div class="flabel">Value</div>
         <textarea class="ftextarea" placeholder="Field value (new lines supported)" oninput="updEbField(${f.id},'value',this.value)">${esc(f.value)}</textarea></div>
-      <div class="frow"><div class="flabel">Field image URL(s) <span class="fsub">optional, one per line</span></div>
+      <div class="frow"><div class="flabel">Field image URL(s) <span class="fsub">optional, one per line (sent as image embeds)</span></div>
         <textarea class="ftextarea" placeholder="https://image-1…\nhttps://image-2…" oninput="updEbField(${f.id},'imageUrl',this.value)">${esc(f.imageUrl||'')}</textarea></div>
-      <div class="frow"><div class="flabel">Attach field image(s) <span class="fsub">optional, multiple</span></div>
+      <div class="frow"><div class="flabel">Attach field image(s) <span class="fsub">optional, multiple (sent as image embeds)</span></div>
         <input class="finput" type="file" accept="image/*" multiple onchange="handleFieldImageUpload(${f.id}, this)">
         <div style="margin-top:6px;color:var(--t3);font-size:12px">${fieldImageCount ? `Attached (${fieldImageCount}): ${esc(fieldImageNames.join(', '))}` : 'No field images attached.'}</div>
         <button class="sbtn" type="button" style="margin-top:8px" onclick="clearFieldImage(${f.id})">🧹 Remove field images</button>
