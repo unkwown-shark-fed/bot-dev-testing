@@ -1334,9 +1334,14 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (!channelId) return res.status(404).json({ error: `Channel "${channelInput}" not found in any configured guild` });
 
     const fieldAttachmentEntries = Array.isArray(embed?.fields)
-      ? embed.fields
-          .map((f, idx) => ({ index: idx, attachment: f?.imageAttachment || null }))
-          .filter(x => x.attachment?.dataUrl)
+      ? embed.fields.flatMap((f, idx) => {
+          const attachments = Array.isArray(f?.imageAttachments)
+            ? f.imageAttachments
+            : (f?.imageAttachment ? [f.imageAttachment] : []);
+          return attachments
+            .map(att => ({ index: idx, attachment: att }))
+            .filter(x => x.attachment?.dataUrl);
+        })
       : [];
 
     const rawAttachments = [
@@ -1407,25 +1412,51 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (embed.image)       discordEmbed.image        = { url: embed.image };
     const embedLevelFile = attachedImageFiles.find(f => f.source === 'embed');
     if (!embed.image && embedLevelFile) discordEmbed.image = { url: `attachment://${embedLevelFile.name}` };
+    const fieldImageEmbeds = [];
     if (embed.fields?.length) {
       discordEmbed.fields = embed.fields.map((f, idx) => {
-        const fieldFile = attachedImageFiles.find(x => x.source === 'field' && x.fieldIndex === idx);
-        const fieldImageLink = f.imageUrl
-          ? `
-🖼 [View image](${f.imageUrl})`
-          : (fieldFile ? `
-🖼 [View image](attachment://${fieldFile.name})` : '');
+        const fieldFiles = attachedImageFiles.filter(x => x.source === 'field' && x.fieldIndex === idx);
+        const parsedUrls = Array.isArray(f.imageUrls)
+          ? f.imageUrls
+          : String(f.imageUrl || '')
+              .split(/[\n,]/)
+              .map(url => String(url || '').trim())
+              .filter(Boolean);
+
+        const imageSources = [
+          ...parsedUrls,
+          ...fieldFiles.map(file => `attachment://${file.name}`),
+        ];
+
+        imageSources.forEach((imgSrc, imageIdx) => {
+          fieldImageEmbeds.push({
+            color: discordEmbed.color,
+            title: f.name ? `${f.name} — Image ${imageIdx + 1}` : `Field image ${idx + 1}.${imageIdx + 1}`,
+            image: { url: imgSrc },
+          });
+        });
+
         const baseValue = String(f.value || '').trim() || '​';
         return {
           name: f.name,
-          value: `${baseValue}${fieldImageLink}`,
+          value: baseValue,
           inline: !!f.inline,
         };
       });
     }
 
-    const payload = { embeds: [discordEmbed] };
-    if (content) payload.content = content;
+    const maxExtraEmbeds = 9;
+    const limitedFieldImageEmbeds = fieldImageEmbeds.slice(0, maxExtraEmbeds);
+    const omittedFieldImageCount = Math.max(0, fieldImageEmbeds.length - limitedFieldImageEmbeds.length);
+
+    const payload = { embeds: [discordEmbed, ...limitedFieldImageEmbeds] };
+    if (content || omittedFieldImageCount) {
+      const trimmed = String(content || '').trim();
+      const omittedNote = omittedFieldImageCount
+        ? `\n⚠️ ${omittedFieldImageCount} field image(s) were omitted because Discord allows max 10 embeds per message.`
+        : '';
+      payload.content = `${trimmed}${omittedNote}`.trim();
+    }
     const files = attachedImageFiles.length ? attachedImageFiles.map(({ name, data }) => ({ name, data })) : undefined;
 
 
