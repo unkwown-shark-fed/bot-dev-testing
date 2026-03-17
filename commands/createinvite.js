@@ -54,7 +54,7 @@ module.exports = {
     if (!botPerms?.has(PermissionFlagsBits.CreateInstantInvite)) {
       return interaction.reply({
         content: `❌ I do not have permission to create invites in ${channel}.`,
-        ephemeral: true,
+        ephemeral: false,
       });
     }
 
@@ -85,12 +85,12 @@ module.exports = {
           `• Expires: **${expiresText}**`,
           `• Temporary membership: **${temporary ? 'Yes' : 'No'}**`,
         ].join('\n'),
-        ephemeral: true,
+        ephemeral: false,
       });
     } catch (error) {
       return interaction.reply({
         content: `❌ Failed to create invite for ${channel}: ${error.message}`,
-        ephemeral: true,
+        ephemeral: false,
       });
     }
   },
