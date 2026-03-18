@@ -46,7 +46,7 @@ module.exports = {
     if (!INVITABLE_CHANNEL_TYPES.has(channel.type)) {
       return interaction.reply({
         content: '❌ This channel type does not support invite links. Please choose a text, voice, stage, announcement, or forum channel.',
-        ephemeral: true,
+        ephemeral: false,
       });
     }
 
