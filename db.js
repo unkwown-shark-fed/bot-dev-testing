@@ -37,6 +37,18 @@ const commandSchema = new mongoose.Schema({
 
 const Command = mongoose.models.Command || mongoose.model('Command', commandSchema);
 
+const memberSnapshotSchema = new mongoose.Schema({
+  guildId:     { type: String, required: true, index: true },
+  dateKey:     { type: String, required: true }, // UTC YYYY-MM-DD
+  memberCount: { type: Number, required: true, min: 0 },
+  createdAt:   { type: Date, default: Date.now },
+  updatedAt:   { type: Date, default: Date.now },
+});
+
+memberSnapshotSchema.index({ guildId: 1, dateKey: 1 }, { unique: true });
+
+const MemberSnapshot = mongoose.models.MemberSnapshot || mongoose.model('MemberSnapshot', memberSnapshotSchema);
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getAllCommands() {
@@ -117,9 +129,29 @@ async function syncFileCommands(commandsArray) {
   }
 }
 
+async function upsertMemberSnapshot(guildId, dateKey, memberCount) {
+  await connect();
+  return MemberSnapshot.findOneAndUpdate(
+    { guildId, dateKey },
+    { $set: { memberCount, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+}
+
+async function getMemberSnapshots(guildId, fromDateKey, toDateKey) {
+  await connect();
+  return MemberSnapshot.find({
+    guildId,
+    dateKey: { $gte: fromDateKey, $lte: toDateKey },
+  })
+    .sort({ dateKey: 1 })
+    .lean();
+}
+
 module.exports = {
   connect,
   Command,
+  MemberSnapshot,
   getAllCommands,
   getCommand,
   upsertCommand,
@@ -127,4 +159,6 @@ module.exports = {
   incrementUsage,
   incrementError,
   syncFileCommands,
+  upsertMemberSnapshot,
+  getMemberSnapshots,
 };
