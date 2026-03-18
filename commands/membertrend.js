@@ -35,45 +35,6 @@ function toDateKeyUTC(dateObj) {
   return dateObj.toISOString().slice(0, 10);
 }
 
-function buildDateRangeKeys(fromDateKey, toDateKey) {
-  const keys = [];
-  const cursor = new Date(`${fromDateKey}T00:00:00.000Z`);
-  const end = new Date(`${toDateKey}T00:00:00.000Z`);
-
-  while (cursor.getTime() <= end.getTime()) {
-    keys.push(toDateKeyUTC(cursor));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-
-  return keys;
-}
-
-async function buildEstimatedRowsFromCurrentMembers(guild, fromDateKey, toDateKey) {
-  await guild.members.fetch();
-
-  const joinCountByDate = new Map();
-  let joinedBeforeStart = 0;
-
-  for (const member of guild.members.cache.values()) {
-    if (!member.joinedTimestamp) continue;
-    const joinedDateKey = toDateKeyUTC(new Date(member.joinedTimestamp));
-
-    if (joinedDateKey < fromDateKey) {
-      joinedBeforeStart++;
-      continue;
-    }
-
-    if (joinedDateKey > toDateKey) continue;
-    joinCountByDate.set(joinedDateKey, (joinCountByDate.get(joinedDateKey) || 0) + 1);
-  }
-
-  let running = joinedBeforeStart;
-  return buildDateRangeKeys(fromDateKey, toDateKey).map(dateKey => {
-    running += joinCountByDate.get(dateKey) || 0;
-    return { dateKey, memberCount: running };
-  });
-}
-
 module.exports = {
   data: createCommandBuilder({
     name: 'membertrend',
@@ -86,10 +47,6 @@ module.exports = {
       .addStringOption(option => option
         .setName('to')
         .setDescription('End date (YYYY-MM-DD or DD-MM-YYYY). Defaults to today (UTC)')
-        .setRequired(false))
-      .addBooleanOption(option => option
-        .setName('estimate_if_missing')
-        .setDescription('If true, estimate from current member join dates when snapshots are missing')
         .setRequired(false)),
   }).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   cooldown: 5,
@@ -98,7 +55,6 @@ module.exports = {
 
     const fromInput = interaction.options.getString('from', true);
     const toInput = interaction.options.getString('to', false);
-    const estimateIfMissing = interaction.options.getBoolean('estimate_if_missing') ?? true;
 
     const parsedFrom = parseDateInput(fromInput);
     if (!parsedFrom) {
@@ -117,19 +73,12 @@ module.exports = {
     }
 
     try {
-      let rows = await db.getMemberSnapshots(interaction.guildId, fromDateKey, toDateKey);
-      let estimated = false;
-
+      const rows = await db.getMemberSnapshots(interaction.guildId, fromDateKey, toDateKey);
       if (!rows.length) {
-        if (!estimateIfMissing) {
-          return interaction.editReply([
-            `📉 No daily member snapshots found for **${fromDateKey} → ${toDateKey}**.`,
-            'Tip: enable `estimate_if_missing` to build an estimate from current member join dates.',
-          ].join('\n'));
-        }
-
-        rows = await buildEstimatedRowsFromCurrentMembers(interaction.guild, fromDateKey, toDateKey);
-        estimated = true;
+        return interaction.editReply([
+          `📉 No daily member snapshots found for **${fromDateKey} → ${toDateKey}**.`,
+          'This command only reports dates that were already tracked by the bot.',
+        ].join('\n'));
       }
 
       const first = rows[0];
@@ -152,7 +101,6 @@ module.exports = {
       return interaction.editReply({
         content: [
           `📊 **Daily member trend (${fromDateKey} → ${toDateKey})**`,
-          estimated ? '⚠️ **Estimated Mode:** built from current members only (users who left are not included).' : '',
           `🧾 **Snapshots found:** ${rows.length.toLocaleString()}`,
           `🔁 **Change in period:** ${deltaStr}`,
           `📌 **First:** ${first.dateKey} (${first.memberCount.toLocaleString()})`,
@@ -162,7 +110,7 @@ module.exports = {
           preview,
           '',
           'Full CSV attached.',
-        ].filter(Boolean).join('\n'),
+        ].join('\n'),
         files: [csvFile],
       });
     } catch (error) {
