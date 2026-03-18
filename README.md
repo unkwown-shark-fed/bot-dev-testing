@@ -61,7 +61,6 @@ npm start
 | `/userinfo [user]` | Display detailed user information | 5s |
 | `/status` | Bot health and statistics (admin only) | 3s |
 | `/createinvite` | Create invite links for specific channels | 5s |
-| `/joinedafter [date]` | Count members who joined after a date (UTC) | 5s |
 
 ### 📤 Export Commands
 | Command | Description | Cooldown |
