@@ -1,11 +1,26 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { createCommandBuilder } = require('../utils/builders');
 
-function parseIsoDateInput(input) {
+function parseDateInput(input) {
   const raw = String(input || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  if (!raw) return null;
 
-  const [year, month, day] = raw.split('-').map(Number);
+  let year;
+  let month;
+  let day;
+  let normalized;
+
+  // Support both YYYY-MM-DD and DD-MM-YYYY
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    [year, month, day] = raw.split('-').map(Number);
+    normalized = raw;
+  } else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
+    [day, month, year] = raw.split('-').map(Number);
+    normalized = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  } else {
+    return null;
+  }
+
   const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
   // Validate calendar correctness (e.g. reject 2026-02-31)
@@ -17,17 +32,17 @@ function parseIsoDateInput(input) {
     return null;
   }
 
-  return { raw, date };
+  return { raw, normalized, date };
 }
 
 module.exports = {
   data: createCommandBuilder({
     name: 'joinedafter',
-    description: 'Count members who joined the server after a given date (YYYY-MM-DD)',
+    description: 'Count members who joined after a date (supports YYYY-MM-DD or DD-MM-YYYY)',
     configure: builder => builder
       .addStringOption(option => option
         .setName('date')
-        .setDescription('Date in YYYY-MM-DD format (UTC), e.g. 2026-01-01')
+        .setDescription('Date (UTC): YYYY-MM-DD or DD-MM-YYYY, e.g. 2025-01-01')
         .setRequired(true)),
   }).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   cooldown: 5,
@@ -35,9 +50,9 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const dateInput = interaction.options.getString('date', true);
-    const parsed = parseIsoDateInput(dateInput);
+    const parsed = parseDateInput(dateInput);
     if (!parsed) {
-      return interaction.editReply('❌ Invalid date format. Use **YYYY-MM-DD** (example: `2026-01-01`).');
+      return interaction.editReply('❌ Invalid date format. Use **YYYY-MM-DD** or **DD-MM-YYYY** (example: `2025-01-01` or `01-01-2025`).');
     }
 
     const threshold = parsed.date;
@@ -56,9 +71,9 @@ module.exports = {
       const joinedCount = joinedAfterMembers.size;
 
       return interaction.editReply([
-        `📅 **Date (UTC):** ${parsed.raw}`,
-        `👥 **Members joined after this date:** ${joinedCount}`,
-        `📊 **Total server members:** ${totalMembers}`,
+        `📅 **Date (UTC):** ${parsed.normalized}`,
+        `👥 **Members joined after this date:** ${joinedCount.toLocaleString()}`,
+        `📊 **Total server members:** ${totalMembers.toLocaleString()}`,
       ].join('\n'));
     } catch (error) {
       return interaction.editReply(`❌ Failed to count joined members: ${error.message}`);
