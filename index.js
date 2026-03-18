@@ -42,6 +42,10 @@ const DASHBOARD_PASS = process.env.DASHBOARD_PASSWORD || '';
 const ACTIVITY_TYPES = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
 const PRESENCE_UPDATE_FILE = path.join(__dirname, '.presence_update.json');
 
+function getUtcDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
 function buildPresence({ status, acttype, acttext }) {
   return {
     status: status || 'online',
@@ -188,6 +192,26 @@ client.once('ready', async () => {
       logger.warn(`[presence] Failed to apply update: ${e.message}`);
     }
   }, 15_000); // checks every 15 seconds
+
+  // ── Daily member snapshot tracker (UTC) ───────────────────────────────────
+  // Stores one memberCount snapshot per guild per day so /membertrend can
+  // report historical daily totals.
+  async function captureDailyMemberSnapshots() {
+    const dateKey = getUtcDateKey(new Date());
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        const memberCount = guild.memberCount || 0;
+        await db.upsertMemberSnapshot(guild.id, dateKey, memberCount);
+      } catch (e) {
+        logger.warn(`[membertrend] Snapshot failed for guild ${guild.id}: ${e.message}`);
+      }
+    }
+    logger.info(`[membertrend] Daily snapshots upserted for ${client.guilds.cache.size} guild(s) on ${dateKey}`);
+  }
+
+  // Run once on startup, then hourly. Upsert prevents duplicates for same day.
+  await captureDailyMemberSnapshots();
+  setInterval(captureDailyMemberSnapshots, 60 * 60 * 1000);
 });
 
 // ── Interaction handler ───────────────────────────────────────────────────────
