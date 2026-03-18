@@ -60,6 +60,8 @@ npm start
 | `/serverinfo` | Display detailed server information | 5s |
 | `/userinfo [user]` | Display detailed user information | 5s |
 | `/status` | Bot health and statistics (admin only) | 3s |
+| `/createinvite` | Create invite links for specific channels | 5s |
+| `/joinedafter [date]` | Count members who joined after a date (UTC) | 5s |
 
 ### 📤 Export Commands
 | Command | Description | Cooldown |
@@ -174,6 +176,7 @@ When inviting your bot, ensure it has these permissions:
 **For Moderation Commands:**
 - Manage Messages (`/cleanup`)
 - Manage Roles (`/rolemanage`)
+- Create Instant Invite (`/createinvite`)
 - Manage Events (optional)
 
 **Privileged Intents Required:**
