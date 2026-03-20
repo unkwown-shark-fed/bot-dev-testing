@@ -19,6 +19,7 @@ const express      = require('express');
 const { spawn }    = require('child_process');
 const fs           = require('fs');
 const path         = require('path');
+const crypto       = require('crypto');
 const WebSocket    = require('ws');
 const { REST, Routes } = require('discord.js');
 const mongoose     = require('mongoose');
