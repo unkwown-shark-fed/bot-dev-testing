@@ -75,12 +75,12 @@ function buildDayBlock(date) {
     r.mode
   );
 
-  return `# ${date}\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
+  return `**${date}**\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
 }
 
 function buildScheduleDescription() {
-  const dayBlocks = MATCH_DATES.map(date => buildDayBlock(date)).join('\n\n');
-  return `${EMBED_MESSAGE.trim()}\n\n${dayBlocks}`;
+  const dayBlocks = MATCH_DATES.map(date => buildDayBlock(date)).join('\n');
+  return `${EMBED_MESSAGE.trim()}\n${dayBlocks}`;
 }
 
 function buildEmbed() {
