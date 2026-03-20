@@ -154,6 +154,9 @@ It includes "if you set X, then Y happens" explanations and practical flow examp
 npm start          # Start the bot
 npm run deploy     # Deploy slash commands
 npm run dev        # Start in development mode
+npm test           # Run automated smoke tests
+npm run check      # Syntax check all JS files
+npm run lint       # Run style/quality checks
 npm run logs       # Tail main log file
 npm run errors     # Tail error log file
 ```
