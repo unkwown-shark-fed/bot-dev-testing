@@ -65,34 +65,29 @@ function buildDay(date) {
   }));
 }
 
-function buildTable() {
-  let table =
-    'Match   | Time     | Date           | Map        | Mode\n' +
-    '------------------------------------------------------------\n';
+function buildDayBlock(date) {
+  const rows = buildDay(date);
+  const lines = rows.map(r =>
+    r.match.padEnd(7) + ' | ' +
+    r.time.padEnd(8) + ' | ' +
+    r.date.padEnd(14) + ' | ' +
+    r.map.padEnd(8) + ' | ' +
+    r.mode
+  );
 
-  for (const date of MATCH_DATES) {
-    const rows = buildDay(date);
+  return `**${date}**\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
+}
 
-    for (const r of rows) {
-      table +=
-        r.match.padEnd(7) + ' | ' +
-        r.time.padEnd(8) + ' | ' +
-        r.date.padEnd(14) + ' | ' +
-        r.map.padEnd(10) + ' | ' +
-        r.mode + '\n';
-    }
-
-    table += '------------------------------------------------------------\n';
-  }
-
-  return table;
+function buildScheduleDescription() {
+  const dayBlocks = MATCH_DATES.map(date => buildDayBlock(date)).join('\n');
+  return `${EMBED_MESSAGE.trim()}\n${dayBlocks}`;
 }
 
 function buildEmbed() {
   return createEmbed({
     title: 'BATTLEGROUNDS MOBILE INDIA Community Custom Matches',
     color: EMBED_COLORS.info,
-    description: EMBED_MESSAGE.trim() + '\n\n```' + buildTable() + '```',
+    description: buildScheduleDescription(),
     footer: { text: 'Tap the buttons below, then tap on "Interested" to get notifications.' },
   });
 }
