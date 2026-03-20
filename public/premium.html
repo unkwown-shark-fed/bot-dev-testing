@@ -75,6 +75,23 @@ input[type=color] { cursor: pointer; }
 }
 .lbtn:hover { background: var(--acc2); transform: translateY(-1px); }
 .lbtn:active { transform: translateY(0); }
+.ldiv {
+  display: flex; align-items: center; gap: 10px; color: var(--t3);
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  margin-top: 16px;
+}
+.ldiv::before, .ldiv::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
+.ldiscord {
+  width: 100%; margin-top: 12px; padding: 11px;
+  background: #5865f2; border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--r); color: #fff; font-size: 13px; font-weight: 700;
+  transition: filter .18s, transform .15s;
+}
+.ldiscord:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.ldiscord:active { transform: translateY(0); }
+.ldiscord[hidden] { display: none !important; }
 
 /* ── APP SHELL ───────────────────────────────────────────────────────────── */
 #app { display: none; flex-direction: column; min-height: 100vh; }
@@ -538,6 +555,8 @@ input[type=color] { cursor: pointer; }
     <input class="lf-input" type="password" id="lpw" placeholder="Enter password" autocomplete="current-password">
     <div class="lerr" id="lerr"></div>
     <button class="lbtn" id="loginBtn" type="button">Enter Studio →</button>
+    <div class="ldiv">or</div>
+    <button class="ldiscord" id="discordLoginBtn" type="button" hidden>Continue with Discord</button>
   </div>
 </div>
 
@@ -1114,6 +1133,17 @@ let conds = [];
 let acts  = [];
 let pTimer = null;
 
+const urlParams = new URLSearchParams(location.search);
+const discordSessionToken = urlParams.get('discordToken');
+if (discordSessionToken) {
+  TOK = discordSessionToken;
+  localStorage.setItem('bst', TOK);
+  urlParams.delete('discordToken');
+  urlParams.delete('expiresInSeconds');
+  const qs = urlParams.toString();
+  history.replaceState({}, '', `${location.pathname}${qs ? `?${qs}` : ''}`);
+}
+
 // ── MOBILE BUILDER TABS ────────────────────────────────────────────────────
 let activeBPanel = 'config';
 function builderTab(panel, btn) {
@@ -1227,6 +1257,33 @@ async function login() {
 document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); login(); } });
 const loginBtnEl = document.getElementById('loginBtn');
 if (loginBtnEl) loginBtnEl.addEventListener('click', (e) => { e.preventDefault(); login(); });
+
+async function setupDiscordLogin() {
+  const discordBtn = document.getElementById('discordLoginBtn');
+  const errEl = document.getElementById('lerr');
+  if (!discordBtn) return;
+
+  try {
+    const r = await api('/api/auth/discord/config', { skipAuth: true });
+    const d = await r.json();
+    if (!r.ok || !d?.enabled) return;
+    discordBtn.hidden = false;
+    discordBtn.addEventListener('click', () => {
+      location.assign('/api/auth/discord');
+    });
+  } catch (_) {}
+
+  const loginError = urlParams.get('loginError');
+  if (loginError && errEl) {
+    errEl.textContent = loginError.startsWith('discord_oauth_')
+      ? 'Discord login failed. Try again or use dashboard password.'
+      : 'Login failed.';
+    urlParams.delete('loginError');
+    const qs = urlParams.toString();
+    history.replaceState({}, '', `${location.pathname}${qs ? `?${qs}` : ''}`);
+  }
+}
+setupDiscordLogin();
 function logout() { TOK = null; localStorage.removeItem('bst'); location.reload(); }
 
 function api(url, o = {}) {

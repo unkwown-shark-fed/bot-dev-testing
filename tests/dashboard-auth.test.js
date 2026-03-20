@@ -44,3 +44,15 @@ test('dashboard auth enforces rate limits and supports logout', () => {
   auth.logout(success.token);
   assert.equal(auth.authenticateBearerToken(success.token), false);
 });
+
+test('dashboard auth can issue a session without password flow', () => {
+  const auth = createDashboardAuth({
+    password: 'secret',
+    sessionTtlMs: 60_000,
+  });
+
+  const session = auth.createSessionToken();
+  assert.equal(typeof session.token, 'string');
+  assert.equal(session.expiresInSeconds, 60);
+  assert.equal(auth.authenticateBearerToken(session.token), true);
+});
