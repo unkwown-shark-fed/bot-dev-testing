@@ -1,14 +1,11 @@
 {
-  "allowedGuilds": [
-    "410479299347480576",
-    "1180796521847988354"
-  ],
-  "commandRoleId": "790571331962798129",
+  "allowedGuilds": [],
+  "commandRoleId": "",
   "status": "idle",
   "acttype": "Listening",
-  "acttext": "siuuuu",
-  "logch": "1472912908001476703",
-  "errch": "1421576125766959326",
+  "acttext": "with commands",
+  "logch": "",
+  "errch": "",
   "devmode": false,
   "dms": true
 }

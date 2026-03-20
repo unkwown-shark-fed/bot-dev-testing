@@ -1,6 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const logger = require('./logger');
 
 // ── Connection ────────────────────────────────────────────────────────────────
 let _connected = false;
@@ -11,12 +12,12 @@ async function connect() {
   if (!uri) throw new Error('MONGODB_URI is not set in .env');
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 });
   _connected = true;
-  console.log('[DB] Connected to MongoDB Atlas');
+  logger.info('[DB] Connected to MongoDB Atlas');
 }
 
 mongoose.connection.on('disconnected', () => {
   _connected = false;
-  console.warn('[DB] Disconnected — will reconnect on next operation');
+  logger.warn('[DB] Disconnected — will reconnect on next operation');
 });
 
 // ── Schema ────────────────────────────────────────────────────────────────────

@@ -19,6 +19,7 @@ const express      = require('express');
 const { spawn }    = require('child_process');
 const fs           = require('fs');
 const path         = require('path');
+const crypto       = require('crypto');
 const WebSocket    = require('ws');
 const { REST, Routes } = require('discord.js');
 const mongoose     = require('mongoose');
@@ -39,6 +40,40 @@ if (!PASSWORD) {
   console.error('❌ DASHBOARD_PASSWORD is required in environment. Refusing to start dashboard.');
   process.exit(1);
 }
+
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const MAX_LOGIN_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const sessions = new Map();
+const loginAttempts = new Map();
+
+function createSession() {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, Date.now() + SESSION_TTL_MS);
+  return token;
+}
+
+function clearExpiredSessions() {
+  const now = Date.now();
+  for (const [token, expiresAt] of sessions.entries()) {
+    if (expiresAt <= now) sessions.delete(token);
+  }
+}
+
+function isRateLimited(ip) {
+  const now = Date.now();
+  const attempts = (loginAttempts.get(ip) || []).filter(ts => now - ts < LOGIN_WINDOW_MS);
+  loginAttempts.set(ip, attempts);
+  return attempts.length >= MAX_LOGIN_ATTEMPTS;
+}
+
+function recordFailedAttempt(ip) {
+  const attempts = loginAttempts.get(ip) || [];
+  attempts.push(Date.now());
+  loginAttempts.set(ip, attempts);
+}
+
+setInterval(clearExpiredSessions, 30 * 60 * 1000).unref();
 
 // ── Schedule Model ─────────────────────────────────────────────────────────────
 function getScheduleModel() {
@@ -79,8 +114,20 @@ app.get('/', (_req, res) => {
 });
 
 function auth(req, res, next) {
-  if ((req.headers.authorization || '') !== `Bearer ${PASSWORD}`)
+  clearExpiredSessions();
+  const authHeader = (req.headers.authorization || '').trim();
+  if (!authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim();
+  const expiresAt = sessions.get(token);
+  if (!expiresAt || expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  sessions.set(token, Date.now() + SESSION_TTL_MS);
   next();
 }
 
@@ -120,9 +167,21 @@ function spawnBot() {
 
 // ── Auth & Status ─────────────────────────────────────────────────────────────
 app.post('/api/login', (req, res) =>
-  res.json(req.body?.password === PASSWORD
-    ? { success: true, token: PASSWORD }
-    : { error: 'Invalid password' })
+  {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    if (isRateLimited(ip)) {
+      return res.status(429).json({ error: 'Too many login attempts. Try again later.' });
+    }
+
+    if (req.body?.password !== PASSWORD) {
+      recordFailedAttempt(ip);
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    loginAttempts.delete(ip);
+    const sessionToken = createSession();
+    return res.json({ success: true, token: sessionToken, expiresInSeconds: Math.floor(SESSION_TTL_MS / 1000) });
+  }
 );
 
 app.get('/api/status', auth, (req, res) => res.json({
