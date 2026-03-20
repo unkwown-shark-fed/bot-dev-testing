@@ -27,6 +27,12 @@ async function buildCommandsForDeploy() {
     for (const record of records) {
       if (!record?.code || record?.source !== 'dashboard') continue;
       try {
+        const filename = path.join(__dirname, 'commands', `_deploy_${record.name}.js`);
+        const m = new Module(filename);
+        m.filename = filename;
+        m.path = path.dirname(filename);
+        m.paths = Module._nodeModulePaths(m.path);
+        m._compile(record.code, filename);
         const m = new Module('');
         m.filename = path.join(__dirname, `_deploy_${record.name}.js`);
         m.paths = Module._nodeModulePaths(__dirname);
