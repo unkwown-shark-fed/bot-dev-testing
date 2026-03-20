@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const ROOT = process.cwd();
 const IGNORED_DIRS = new Set(['.git', 'node_modules', 'logs', 'exports']);
@@ -24,12 +25,11 @@ const files = walk(ROOT);
 let hasFailure = false;
 
 for (const file of files) {
-  const source = fs.readFileSync(file, 'utf8').replace(/^#!.*\n/, '');
-  try {
-    new Function(source);
-  } catch (error) {
+  const run = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
+  if (run.status !== 0) {
     hasFailure = true;
-    console.error(`Syntax error in ${path.relative(ROOT, file)}: ${error.message}`);
+    const details = (run.stderr || run.stdout || '').trim();
+    console.error(`Syntax error in ${path.relative(ROOT, file)}: ${details}`);
   }
 }
 

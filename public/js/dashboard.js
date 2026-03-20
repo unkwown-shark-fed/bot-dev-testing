@@ -50,7 +50,15 @@ function showDashboard() {
   setInterval(updateStatus, 5000);
 }
 
-function logout() {
+async function logout() {
+  try {
+    if (token) {
+      await fetch('/api/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    }
+  } catch (_) {}
   localStorage.removeItem('dashboardToken');
   location.reload();
 }
