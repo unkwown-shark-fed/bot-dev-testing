@@ -43,6 +43,13 @@ function createDashboardAuth({
     return token;
   }
 
+  function createSessionToken() {
+    return {
+      token: createSession(),
+      expiresInSeconds: Math.floor(sessionTtlMs / 1000),
+    };
+  }
+
   function login({ passwordAttempt, ip }) {
     if (isRateLimited(ip)) {
       return { ok: false, status: 429, error: 'Too many login attempts. Try again later.' };
@@ -54,7 +61,7 @@ function createDashboardAuth({
     }
 
     loginAttempts.delete(ip);
-    return { ok: true, token: createSession(), expiresInSeconds: Math.floor(sessionTtlMs / 1000) };
+    return { ok: true, ...createSessionToken() };
   }
 
   function authenticateBearerToken(token) {
@@ -76,6 +83,7 @@ function createDashboardAuth({
   return {
     clearExpiredSessions,
     login,
+    createSessionToken,
     authenticateBearerToken,
     logout,
   };

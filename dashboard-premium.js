@@ -36,6 +36,11 @@ const WRITE_COMMAND_FILES = String(process.env.WRITE_COMMAND_FILES || '').toLowe
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+const DISCORD_OAUTH_CLIENT_ID = process.env.DISCORD_OAUTH_CLIENT_ID || CLIENT_ID || '';
+const DISCORD_OAUTH_CLIENT_SECRET = process.env.DISCORD_OAUTH_CLIENT_SECRET || '';
+const DISCORD_OAUTH_CALLBACK_URL = process.env.DISCORD_OAUTH_CALLBACK_URL || `http://localhost:${PORT}/api/auth/discord/callback`;
+const discordOAuthEnabled = Boolean(DISCORD_OAUTH_CLIENT_ID && DISCORD_OAUTH_CLIENT_SECRET);
+const discordOAuthStates = new Map();
 
 if (!PASSWORD) {
   console.error('❌ DASHBOARD_PASSWORD is required in environment. Refusing to start dashboard.');
@@ -53,6 +58,12 @@ const dashboardAuth = createDashboardAuth({
 });
 
 setInterval(dashboardAuth.clearExpiredSessions, 30 * 60 * 1000).unref();
+setInterval(() => {
+  const now = Date.now();
+  for (const [state, expiresAt] of discordOAuthStates.entries()) {
+    if (expiresAt <= now) discordOAuthStates.delete(state);
+  }
+}, 5 * 60 * 1000).unref();
 
 // ── Schedule Model ─────────────────────────────────────────────────────────────
 function getScheduleModel() {
@@ -150,6 +161,85 @@ app.post('/api/login', (req, res) =>
     return res.json({ success: true, token: result.token, expiresInSeconds: result.expiresInSeconds });
   }
 );
+
+app.get('/api/auth/discord/config', (_req, res) => {
+  res.json({ enabled: discordOAuthEnabled });
+});
+
+app.get('/api/auth/discord', (req, res) => {
+  if (!discordOAuthEnabled) {
+    return res.status(400).json({ error: 'Discord OAuth is not configured on this dashboard.' });
+  }
+
+  const state = crypto.randomBytes(24).toString('hex');
+  discordOAuthStates.set(state, Date.now() + 10 * 60 * 1000);
+
+  const params = new URLSearchParams({
+    client_id: DISCORD_OAUTH_CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: DISCORD_OAUTH_CALLBACK_URL,
+    scope: 'identify',
+    state,
+    prompt: 'none',
+  });
+
+  const authorizationUrl = `https://discord.com/oauth2/authorize?${params.toString()}`;
+  if (req.query?.as === 'json') {
+    return res.json({ authorizationUrl });
+  }
+  return res.redirect(authorizationUrl);
+});
+
+app.get('/api/auth/discord/callback', async (req, res) => {
+  const state = String(req.query?.state || '');
+  const code = String(req.query?.code || '');
+
+  if (!discordOAuthEnabled) {
+    return res.redirect('/?loginError=discord_oauth_disabled');
+  }
+  if (!state || !code) {
+    return res.redirect('/?loginError=discord_oauth_missing_code');
+  }
+  const expiresAt = discordOAuthStates.get(state);
+  discordOAuthStates.delete(state);
+  if (!expiresAt || expiresAt <= Date.now()) {
+    return res.redirect('/?loginError=discord_oauth_invalid_state');
+  }
+
+  try {
+    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: DISCORD_OAUTH_CLIENT_ID,
+        client_secret: DISCORD_OAUTH_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: DISCORD_OAUTH_CALLBACK_URL,
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok || !tokenData?.access_token) {
+      return res.redirect('/?loginError=discord_oauth_token_exchange_failed');
+    }
+
+    const meRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    if (!meRes.ok) {
+      return res.redirect('/?loginError=discord_oauth_user_lookup_failed');
+    }
+
+    const session = dashboardAuth.createSessionToken();
+    const redirectParams = new URLSearchParams({
+      discordToken: session.token,
+      expiresInSeconds: String(session.expiresInSeconds),
+    });
+    return res.redirect(`/?${redirectParams.toString()}`);
+  } catch (_) {
+    return res.redirect('/?loginError=discord_oauth_request_failed');
+  }
+});
 
 app.post('/api/logout', auth, (req, res) => {
   dashboardAuth.logout(req.dashboardToken);
