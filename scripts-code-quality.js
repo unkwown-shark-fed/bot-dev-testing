@@ -10,20 +10,17 @@ const fixMode = process.argv.includes('--fix');
 function walk(dir, result = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name.startsWith('.') && entry.name !== '.env.example') {
-      if (entry.name !== '.gitignore') {
-        // keep hidden files/directories out by default
-      }
-    }
-
     const fullPath = path.join(dir, entry.name);
     const relativePath = path.relative(ROOT, fullPath);
 
     if (entry.isDirectory()) {
+      if (entry.name.startsWith('.')) continue;
       if (IGNORED_DIRS.has(entry.name)) continue;
       walk(fullPath, result);
       continue;
     }
+
+    if (entry.name.startsWith('.') && !['.env.example', '.gitignore'].includes(entry.name)) continue;
 
     const ext = path.extname(entry.name);
     if (TARGET_EXTENSIONS.has(ext)) {

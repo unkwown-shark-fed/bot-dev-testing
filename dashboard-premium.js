@@ -23,6 +23,7 @@ const WebSocket    = require('ws');
 const { REST, Routes } = require('discord.js');
 const mongoose     = require('mongoose');
 const db           = require('./db');
+const { createDashboardAuth } = require('./utils/dashboard-auth');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PORT      = parseInt(process.env.WEB_DASHBOARD_PORT || '3000', 10);
@@ -39,6 +40,18 @@ if (!PASSWORD) {
   console.error('❌ DASHBOARD_PASSWORD is required in environment. Refusing to start dashboard.');
   process.exit(1);
 }
+
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const MAX_LOGIN_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const dashboardAuth = createDashboardAuth({
+  password: PASSWORD,
+  sessionTtlMs: SESSION_TTL_MS,
+  maxLoginAttempts: MAX_LOGIN_ATTEMPTS,
+  loginWindowMs: LOGIN_WINDOW_MS,
+});
+
+setInterval(dashboardAuth.clearExpiredSessions, 30 * 60 * 1000).unref();
 
 // ── Schedule Model ─────────────────────────────────────────────────────────────
 function getScheduleModel() {
@@ -79,8 +92,17 @@ app.get('/', (_req, res) => {
 });
 
 function auth(req, res, next) {
-  if ((req.headers.authorization || '') !== `Bearer ${PASSWORD}`)
+  const authHeader = (req.headers.authorization || '').trim();
+  if (!authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim();
+  if (!dashboardAuth.authenticateBearerToken(token)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  req.dashboardToken = token;
   next();
 }
 
@@ -120,10 +142,18 @@ function spawnBot() {
 
 // ── Auth & Status ─────────────────────────────────────────────────────────────
 app.post('/api/login', (req, res) =>
-  res.json(req.body?.password === PASSWORD
-    ? { success: true, token: PASSWORD }
-    : { error: 'Invalid password' })
+  {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const result = dashboardAuth.login({ passwordAttempt: req.body?.password, ip });
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    return res.json({ success: true, token: result.token, expiresInSeconds: result.expiresInSeconds });
+  }
 );
+
+app.post('/api/logout', auth, (req, res) => {
+  dashboardAuth.logout(req.dashboardToken);
+  res.json({ success: true });
+});
 
 app.get('/api/status', auth, (req, res) => res.json({
   status: botStatus,
@@ -1572,7 +1602,15 @@ runScheduler();                        // also fire on startup
 // ── Command Log to Channel ────────────────────────────────────────────────────
 // Your index.js should POST to /api/log with: { command, user, guild, channel, args }
 // The dashboard will forward this to the configured logch channel.
-app.post('/api/log', async (req, res) => {
+function authBotLog(req, res, next) {
+  const authHeader = (req.headers.authorization || '').trim();
+  if (authHeader !== `Bearer ${PASSWORD}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  return next();
+}
+
+app.post('/api/log', authBotLog, async (req, res) => {
   try {
     const { command, user, guild, channel, args, error: cmdError } = req.body;
     if (!command) return res.status(400).json({ error: 'command is required' });

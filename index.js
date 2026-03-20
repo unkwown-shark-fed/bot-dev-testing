@@ -6,6 +6,7 @@ const logger = require('./logger');
 const config = require('./config.json');
 const db = require('./db');
 const { loadCommandModules } = require('./utils/command-loader');
+const { loadDashboardCommands } = require('./utils/db-command-loader');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -118,28 +119,22 @@ const dbLoadPromise = (async () => {
     const dbCmds = await db.getAllCommands();
     let dbCount = 0;
 
-    for (const record of dbCmds) {
-      if (record.source !== 'dashboard' || !record.code) continue;
+    const { loaded, skipped } = loadDashboardCommands(dbCmds, {
+      basePath: commandsPath,
+      requireExecute: true,
+    });
 
-      try {
-        const Module = require('module');
-        const m = new Module('');
-        m.filename = path.join(commandsPath, `${record.name}.js`);
-        m.paths = Module._nodeModulePaths(commandsPath);
-        m._compile(record.code, `${record.name}.js`);
-        const cmd = m.exports;
-
-        if (cmd?.data?.name && typeof cmd.execute === 'function') {
-          if (client.commands.has(cmd.data.name)) {
-            logger.warn(`DB command ${cmd.data.name} overrides existing file command with the same name`);
-          }
-          client.commands.set(cmd.data.name, cmd);
-          client.stats.commandUsage[cmd.data.name] = 0;
-          dbCount++;
-        }
-      } catch (e) {
-        logger.warn(`Failed to load DB command ${record.name}: ${e.message}`);
+    for (const { command } of loaded) {
+      if (client.commands.has(command.data.name)) {
+        logger.warn(`DB command ${command.data.name} overrides existing file command with the same name`);
       }
+      client.commands.set(command.data.name, command);
+      client.stats.commandUsage[command.data.name] = 0;
+      dbCount++;
+    }
+
+    for (const skip of skipped) {
+      logger.warn(`Failed to load DB command ${skip.name}: ${skip.reason}`);
     }
 
     logger.info(`📦 Loaded ${dbCount} dashboard commands from MongoDB`);
@@ -222,8 +217,16 @@ client.on('interactionCreate', async interaction => {
     await dbLoadPromise;
   }
 
+  const envAllowedGuilds = (process.env.GUILD_IDS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  const effectiveAllowedGuilds = envAllowedGuilds.length > 0
+    ? envAllowedGuilds
+    : (Array.isArray(config.allowedGuilds) ? config.allowedGuilds : []);
+
   // Guild restriction
-  if (Array.isArray(config.allowedGuilds) && config.allowedGuilds.length > 0 && !config.allowedGuilds.includes(interaction.guildId)) {
+  if (effectiveAllowedGuilds.length > 0 && !effectiveAllowedGuilds.includes(interaction.guildId)) {
     return interaction.reply({ content: '⛔ This bot is restricted to specific guilds.', ephemeral: true });
   }
 
@@ -235,28 +238,33 @@ client.on('interactionCreate', async interaction => {
 
   // Cooldown system
   if (command.cooldown) {
-    const { cooldowns } = client;
-    if (!cooldowns.has(command.data.name)) {
-      cooldowns.set(command.data.name, new Collection());
-    }
-
-    const now            = Date.now();
-    const timestamps     = cooldowns.get(command.data.name);
-    const cooldownAmount = (command.cooldown || 3) * 1000;
-
-    if (timestamps.has(interaction.user.id)) {
-      const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
-      if (now < expirationTime) {
-        const timeLeft = ((expirationTime - now) / 1000).toFixed(1);
-        return interaction.reply({
-          content: `⏱️ Please wait ${timeLeft}s before using \`/${command.data.name}\` again.`,
-          ephemeral: true
-        });
+    const ownerId = process.env.BOT_OWNER_ID || '';
+    const isOwner = ownerId && interaction.user.id === ownerId;
+    const isAdmin = interaction.member?.permissions?.has?.(PermissionFlagsBits.Administrator) || false;
+    if (!isOwner && !isAdmin) {
+      const { cooldowns } = client;
+      if (!cooldowns.has(command.data.name)) {
+        cooldowns.set(command.data.name, new Collection());
       }
-    }
 
-    timestamps.set(interaction.user.id, now);
-    setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+      const now            = Date.now();
+      const timestamps     = cooldowns.get(command.data.name);
+      const cooldownAmount = (command.cooldown || 3) * 1000;
+
+      if (timestamps.has(interaction.user.id)) {
+        const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
+        if (now < expirationTime) {
+          const timeLeft = ((expirationTime - now) / 1000).toFixed(1);
+          return interaction.reply({
+            content: `⏱️ Please wait ${timeLeft}s before using \`/${command.data.name}\` again.`,
+            ephemeral: true
+          });
+        }
+      }
+
+      timestamps.set(interaction.user.id, now);
+      setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+    }
   }
 
   // Role-based authorization

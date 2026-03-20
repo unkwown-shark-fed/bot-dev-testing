@@ -3,6 +3,7 @@ require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 const { loadCommandModules } = require('./utils/command-loader');
+const { loadDashboardCommands } = require('./utils/db-command-loader');
 const db = require('./db');
 
 const token = process.env.DISCORD_TOKEN;
@@ -21,31 +22,20 @@ async function buildCommandsForDeploy() {
     console.log('🧠 Loading slash commands from MongoDB records');
     await db.connect();
     const records = await db.getAllCommands();
-    const Module = require('module');
-    const commands = [];
+    const { loaded, skipped } = loadDashboardCommands(records, {
+      basePath: path.join(__dirname, 'commands'),
+      requireExecute: false,
+    });
 
-    for (const record of records) {
-      if (!record?.code || record?.source !== 'dashboard') continue;
-      try {
-        const filename = path.join(__dirname, 'commands', `_deploy_${record.name}.js`);
-        const m = new Module(filename);
-        m.filename = filename;
-        m.path = path.dirname(filename);
-        m.paths = Module._nodeModulePaths(m.path);
-        m._compile(record.code, filename);
-        const m = new Module('');
-        m.filename = path.join(__dirname, `_deploy_${record.name}.js`);
-        m.paths = Module._nodeModulePaths(__dirname);
-        m._compile(record.code, m.filename);
-        const cmd = m.exports;
-        if (cmd?.data?.toJSON) {
-          commands.push(cmd.data.toJSON());
-          console.log(`  ✅ Loaded from DB: /${cmd.data.name}`);
-        }
-      } catch (error) {
-        console.log(`  ⚠️  Skipped DB command ${record.name}: ${error.message}`);
-      }
+    for (const entry of skipped) {
+      console.log(`  ⚠️  Skipped DB command ${entry.name}: ${entry.reason}`);
     }
+
+    const commands = loaded.map(({ command }) => {
+      console.log(`  ✅ Loaded from DB: /${command.data.name}`);
+      return command.data.toJSON();
+    });
+
     return commands;
   }
 
