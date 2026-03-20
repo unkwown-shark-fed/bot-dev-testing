@@ -95,8 +95,8 @@ module.exports = {
 
     // Bot statistics
     const avgLatency = client.ws.ping > 0 ? Math.round(client.ws.ping) : 'N/A';
-    const errorRate = stats.commandsExecuted > 0 
-      ? ((stats.errors / stats.commandsExecuted) * 100).toFixed(2) 
+    const errorRate = stats.commandsExecuted > 0
+      ? ((stats.errors / stats.commandsExecuted) * 100).toFixed(2)
       : '0.00';
 
     embed.addFields({

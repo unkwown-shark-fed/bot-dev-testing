@@ -145,9 +145,24 @@ app.post('/api/stop', auth, (_req, res) => {
 });
 
 app.post('/api/restart', auth, async (_req, res) => {
-  if (botProcess) { botProcess.kill('SIGTERM'); await new Promise(r => setTimeout(r, 1500)); }
-  res.json({ success: true, message: 'Restarting…' });
-  setTimeout(() => { if (botStatus !== 'running') spawnBot(); }, 600);
+  const proc = botProcess;
+  if (proc) {
+    botStatus = 'stopping';
+    proc.kill('SIGTERM');
+
+    // Wait for confirmed process close (or timeout) to avoid restart races.
+    await Promise.race([
+      new Promise(resolve => proc.once('close', resolve)),
+      new Promise(resolve => setTimeout(resolve, 5000)),
+    ]);
+  }
+
+  if (botProcess) {
+    return res.status(500).json({ error: 'Bot did not stop cleanly; restart aborted' });
+  }
+
+  spawnBot();
+  res.json({ success: true, message: 'Restarted' });
 });
 
 app.get('/api/logs', auth, (req, res) =>
@@ -189,7 +204,8 @@ app.get('/api/settings', auth, (_req, res) => {
     let cfg = {};
     if (fs.existsSync(cfgPath)) cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
     const settings = {
-      nick:     cfg.botNick  || '',
+      // Prefer current key `nick`, but keep backward compatibility with older `botNick`.
+      nick:     cfg.nick ?? cfg.botNick ?? '',
       prefix:   cfg.prefix   || '!',
       status:   cfg.status   || 'idle',
       acttype:  cfg.acttype  || 'Listening',
@@ -382,7 +398,7 @@ app.post('/api/commands/upload', auth, async (req, res) => {
   }
 
   if (!cmdModule?.data?.toJSON || typeof cmdModule?.execute !== 'function') {
-    return res.status(400).json({ error: 'Code must export { data: SlashCommandBuilder, execute() }' });
+    return res.status(400).json(buildInvalidCommandUploadResponse(code, cmdModule));
   }
 
   const cmdJson = cmdModule.data.toJSON();
@@ -564,13 +580,32 @@ app.post('/api/sync', auth, async (_req, res) => {
 // ── Helper: load module from code string ──────────────────────────────────────
 function loadModuleFromString(code) {
   const Module = require('module');
-  const filename = path.join(CMD_DIR || ROOT, '_preview.js');
-  const m = new Module(filename);
-  m.filename = filename;
-  m.path = path.dirname(filename);
-  m.paths = Module._nodeModulePaths(m.path);
-  m._compile(code, filename);
+  const m = new Module('');
+  m.filename = path.join(CMD_DIR || ROOT, '_preview.js');
+  m.paths = Module._nodeModulePaths(CMD_DIR || ROOT);
+  m._compile(code, m.filename);
   return m.exports;
+}
+
+
+function buildInvalidCommandUploadResponse(code, cmdModule) {
+  const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
+  const hasModuleExports = /\bmodule\.exports\b|\bexports\./.test(code);
+  const looksLikeBotEntrypoint = /\bnew\s+Client\s*\(|\bclient\.login\s*\(/.test(code);
+
+  const hints = [`Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`];
+  if (!hasModuleExports) {
+    hints.push('This file does not appear to export anything (missing module.exports / exports.*).');
+  }
+  if (looksLikeBotEntrypoint) {
+    hints.push('The uploaded code looks like a bot entry file (index.js), not a slash command module.');
+  }
+
+  return {
+    error: 'Code must export { data: SlashCommandBuilder, execute() }',
+    hint: hints.join(' '),
+    example: "module.exports = { data: new SlashCommandBuilder().setName('ping').setDescription('...'), async execute(interaction) { await interaction.reply('pong'); } }",
+  };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1278,7 +1313,7 @@ ${acts}
 // ── Embed Send ────────────────────────────────────────────────────────────────
 app.post('/api/embed/send', auth, async (req, res) => {
   try {
-    const { channel: channelInput, embed, buttons = [], content = '' } = req.body;
+    const { channel: channelInput, embed, buttons = [], content = '', imageAttachment = null, imageAttachments = [] } = req.body;
     if (!channelInput) return res.status(400).json({ error: 'channel is required' });
     if (!TOKEN)        return res.status(500).json({ error: 'DISCORD_TOKEN not configured' });
     if (!GUILD_IDS.length) return res.status(500).json({ error: 'GUILD_IDS not configured' });
@@ -1298,6 +1333,74 @@ app.post('/api/embed/send', auth, async (req, res) => {
 
     if (!channelId) return res.status(404).json({ error: `Channel "${channelInput}" not found in any configured guild` });
 
+    const fieldAttachmentEntries = Array.isArray(embed?.fields)
+      ? embed.fields.flatMap((f, idx) => {
+          const attachments = Array.isArray(f?.imageAttachments)
+            ? f.imageAttachments
+            : (f?.imageAttachment ? [f.imageAttachment] : []);
+          return attachments
+            .map(att => ({ index: idx, attachment: att }))
+            .filter(x => x.attachment?.dataUrl);
+        })
+      : [];
+
+    const rawAttachments = [
+      ...(imageAttachment?.dataUrl ? [{ source: 'embed', fieldIndex: null, attachment: imageAttachment }] : []),
+      ...(Array.isArray(imageAttachments) ? imageAttachments.map(att => ({ source: 'embed', fieldIndex: null, attachment: att })) : []),
+      ...fieldAttachmentEntries.map(entry => ({ source: 'field', fieldIndex: entry.index, attachment: entry.attachment })),
+    ];
+
+    if (rawAttachments.length > 10) {
+      return res.status(400).json({ error: 'Maximum 10 attached images are allowed per embed message' });
+    }
+
+    const extMap = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+    };
+
+    const attachedImageFiles = [];
+    for (let idx = 0; idx < rawAttachments.length; idx++) {
+      const item = rawAttachments[idx];
+      const att = item?.attachment;
+      if (!att?.dataUrl) continue;
+
+      const dataUrlMatch = String(att.dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!dataUrlMatch) {
+        return res.status(400).json({ error: `Invalid image attachment format at position ${idx + 1}` });
+      }
+
+      const base64Payload = dataUrlMatch[2];
+      const imageBuffer = Buffer.from(base64Payload, 'base64');
+      if (!imageBuffer.length) {
+        return res.status(400).json({ error: `Uploaded image ${idx + 1} is empty` });
+      }
+      if (imageBuffer.length > 8 * 1024 * 1024) {
+        return res.status(400).json({ error: `Attached image ${idx + 1} must be 8MB or smaller` });
+      }
+
+      const mimeType = dataUrlMatch[1].toLowerCase();
+      const ext = extMap[mimeType];
+      if (!ext) {
+        return res.status(400).json({ error: 'Only PNG/JPG/GIF/WEBP images are supported' });
+      }
+
+      const safeBaseName = String(att.name || `embed-image-${idx + 1}`)
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .slice(0, 48) || `embed-image-${idx + 1}`;
+
+      attachedImageFiles.push({
+        source: item.source || 'embed',
+        fieldIndex: item.fieldIndex,
+        name: `${safeBaseName}-${idx + 1}.${ext}`,
+        data: imageBuffer,
+      });
+    }
+
     const discordEmbed = {};
     if (embed.title)       discordEmbed.title       = embed.title;
     if (embed.description) discordEmbed.description = embed.description;
@@ -1307,10 +1410,55 @@ app.post('/api/embed/send', auth, async (req, res) => {
     if (embed.timestamp === 'current') discordEmbed.timestamp = new Date().toISOString();
     if (embed.thumbnail)   discordEmbed.thumbnail    = { url: embed.thumbnail };
     if (embed.image)       discordEmbed.image        = { url: embed.image };
-    if (embed.fields?.length) discordEmbed.fields   = embed.fields.map(f => ({ name: f.name, value: f.value, inline: !!f.inline }));
+    const embedLevelFile = attachedImageFiles.find(f => f.source === 'embed');
+    if (!embed.image && embedLevelFile) discordEmbed.image = { url: `attachment://${embedLevelFile.name}` };
+    const fieldImageEmbeds = [];
+    if (embed.fields?.length) {
+      discordEmbed.fields = embed.fields.map((f, idx) => {
+        const fieldFiles = attachedImageFiles.filter(x => x.source === 'field' && x.fieldIndex === idx);
+        const parsedUrls = Array.isArray(f.imageUrls)
+          ? f.imageUrls
+          : String(f.imageUrl || '')
+              .split(/[\n,]/)
+              .map(url => String(url || '').trim())
+              .filter(Boolean);
 
-    const payload = { embeds: [discordEmbed] };
-    if (content) payload.content = content;
+        const imageSources = [
+          ...parsedUrls,
+          ...fieldFiles.map(file => `attachment://${file.name}`),
+        ];
+
+        imageSources.forEach((imgSrc, imageIdx) => {
+          fieldImageEmbeds.push({
+            color: discordEmbed.color,
+            title: f.name ? `${f.name} — Image ${imageIdx + 1}` : `Field image ${idx + 1}.${imageIdx + 1}`,
+            image: { url: imgSrc },
+          });
+        });
+
+        const baseValue = String(f.value || '').trim() || '​';
+        return {
+          name: f.name,
+          value: baseValue,
+          inline: !!f.inline,
+        };
+      });
+    }
+
+    const maxExtraEmbeds = 9;
+    const limitedFieldImageEmbeds = fieldImageEmbeds.slice(0, maxExtraEmbeds);
+    const omittedFieldImageCount = Math.max(0, fieldImageEmbeds.length - limitedFieldImageEmbeds.length);
+
+    const payload = { embeds: [discordEmbed, ...limitedFieldImageEmbeds] };
+    if (content || omittedFieldImageCount) {
+      const trimmed = String(content || '').trim();
+      const omittedNote = omittedFieldImageCount
+        ? `\n⚠️ ${omittedFieldImageCount} field image(s) were omitted because Discord allows max 10 embeds per message.`
+        : '';
+      payload.content = `${trimmed}${omittedNote}`.trim();
+    }
+    const files = attachedImageFiles.length ? attachedImageFiles.map(({ name, data }) => ({ name, data })) : undefined;
+
 
     if (buttons.length) {
       payload.components = [{
@@ -1324,7 +1472,7 @@ app.post('/api/embed/send', auth, async (req, res) => {
       }];
     }
 
-    await rest.post(Routes.channelMessages(channelId), { body: payload });
+    await rest.post(Routes.channelMessages(channelId), files ? { body: payload, files } : { body: payload });
     res.json({ ok: true, channelId });
   } catch (err) {
     console.error('[embed/send]', err);

@@ -75,7 +75,7 @@ async function updateStatus() {
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const restartBtn = document.getElementById('restartBtn');
-    
+
     if (data.status === 'running') {
       badge.textContent = '● Online';
       badge.className = 'status-badge online';
@@ -148,12 +148,12 @@ async function loadCommands() {
     const data = await res.json();
     const container = document.getElementById('commandsList');
     container.innerHTML = '';
-    
+
     if (data.commands.length === 0) {
       container.innerHTML = '<p>No commands found</p>';
       return;
     }
-    
+
     data.commands.forEach(cmd => {
       const item = document.createElement('div');
       item.className = 'command-item';
@@ -180,17 +180,17 @@ async function editCommand(name) {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
-    
+
     // Switch to builder page with content
     const navItem = document.querySelector('[data-page="builder"]');
     navItem.click();
-    
+
     // Show code in output
     document.getElementById('generatedCode').textContent = data.content;
     document.getElementById('codeOutput').style.display = 'block';
     window.generatedCommandCode = data.content;
     window.generatedCommandName = name;
-    
+
     alert('Command loaded! You can edit and save it.');
   } catch (err) {
     alert('Failed to load command: ' + err.message);
@@ -199,14 +199,14 @@ async function editCommand(name) {
 
 async function deleteCommand(name) {
   if (!confirm(`Delete command "${name}"? This cannot be undone!`)) return;
-  
+
   try {
     const res = await fetch(`/api/commands/${name}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
-    
+
     if (data.success) {
       alert('✅ Command deleted! Run "npm run deploy" to update Discord.');
       loadCommands();
@@ -235,16 +235,21 @@ function generateCommand() {
     return;
   }
 
+  // Use JSON.stringify so user-provided values can't break generated JS syntax
+  // (quotes, backslashes, newlines, etc.).
+  const jsString = (value) => JSON.stringify(String(value));
+  const commandTitle = `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+
   let code;
   if (type === 'text') {
     code = `const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('${name}')
-    .setDescription('${desc}'),
+    .setName(${jsString(name)})
+    .setDescription(${jsString(desc)}),
   async execute(interaction) {
-    await interaction.reply('${response.replace(/'/g, "\\'")}');
+    await interaction.reply(${jsString(response)});
   }
 };`;
   } else {
@@ -252,12 +257,12 @@ module.exports = {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('${name}')
-    .setDescription('${desc}'),
+    .setName(${jsString(name)})
+    .setDescription(${jsString(desc)}),
   async execute(interaction) {
     const embed = new EmbedBuilder()
-      .setTitle('${name.charAt(0).toUpperCase() + name.slice(1)}')
-      .setDescription('${response.replace(/'/g, "\\'")}')
+      .setTitle(${jsString(commandTitle)})
+      .setDescription(${jsString(response)})
       .setColor(0x5865F2);
     await interaction.reply({ embeds: [embed] });
   }
@@ -304,10 +309,10 @@ function updateButtonPreview() {
   const label = document.getElementById('btnLabel').value || 'Button';
   const style = document.getElementById('btnStyle').value;
   const preview = document.getElementById('buttonPreview');
-  
+
   const urlGroup = document.getElementById('urlGroup');
   urlGroup.style.display = style === 'Link' ? 'block' : 'none';
-  
+
   preview.innerHTML = `<button class="discord-btn-${style}">${label}</button>`;
 }
 
@@ -316,7 +321,7 @@ function generateButtonCode() {
   const style = document.getElementById('btnStyle').value;
   const customId = document.getElementById('btnId').value || 'button_id';
   const url = document.getElementById('btnUrl').value;
-  
+
   let code;
   if (style === 'Link') {
     code = `new ButtonBuilder()
@@ -329,7 +334,7 @@ function generateButtonCode() {
   .setLabel('${label}')
   .setStyle(ButtonStyle.${style})`;
   }
-  
+
   document.getElementById('buttonCode').textContent = code;
   document.getElementById('buttonCodeOutput').style.display = 'block';
 }
@@ -358,7 +363,7 @@ function generateModalCode() {
   const title = document.getElementById('modalTitle').value || 'Modal';
   const modalId = document.getElementById('modalId').value || 'modal_id';
   const fields = Array.from(document.querySelectorAll('.modal-field'));
-  
+
   let fieldsCode = '';
   fields.forEach((field, i) => {
     const label = field.querySelector('[data-field="label"]').value || `Field ${i+1}`;
@@ -370,7 +375,7 @@ function generateModalCode() {
       .setRequired(true),
 `;
   });
-  
+
   const code = `const modal = new ModalBuilder()
   .setCustomId('${modalId}')
   .setTitle('${title}')
@@ -379,7 +384,7 @@ ${fieldsCode.trim()}
   );
 
 await interaction.showModal(modal);`;
-  
+
   document.getElementById('modalCode').textContent = code;
   document.getElementById('modalCodeOutput').style.display = 'block';
 }
@@ -395,9 +400,9 @@ function updateEmbedPreview() {
   const desc = document.getElementById('embedDesc').value;
   const color = document.getElementById('embedColor').value;
   const footer = document.getElementById('embedFooter').value;
-  
+
   document.getElementById('embedColorHex').value = color;
-  
+
   const preview = document.getElementById('embedPreview');
   preview.style.borderLeftColor = color;
   preview.innerHTML = `
@@ -412,16 +417,16 @@ function generateEmbedCode() {
   const desc = document.getElementById('embedDesc').value;
   const color = document.getElementById('embedColor').value;
   const footer = document.getElementById('embedFooter').value;
-  
+
   const hexColor = color.replace('#', '0x');
-  
+
   let code = `const embed = new EmbedBuilder()`;
   if (title) code += `\n  .setTitle('${title}')`;
   if (desc) code += `\n  .setDescription('${desc}')`;
   code += `\n  .setColor(${hexColor})`;
   if (footer) code += `\n  .setFooter({ text: '${footer}' })`;
   code += `;`;
-  
+
   document.getElementById('embedCode').textContent = code;
   document.getElementById('embedCodeOutput').style.display = 'block';
 }
@@ -474,17 +479,17 @@ const templates = {
 function useTemplate(templateName) {
   const template = templates[templateName];
   if (!template) return;
-  
+
   // Switch to builder
   const navItem = document.querySelector('[data-page="builder"]');
   navItem.click();
-  
+
   // Fill fields
   document.getElementById('cmdName').value = template.name;
   document.getElementById('cmdDesc').value = template.desc;
   document.getElementById('cmdType').value = template.type;
   document.getElementById('cmdResponse').value = template.response;
-  
+
   alert(`Template loaded! Customize and generate your command.`);
 }
 
@@ -497,7 +502,7 @@ function addLogLine(log) {
   line.textContent = `[${time}] ${log.message}`;
   container.appendChild(line);
   container.scrollTop = container.scrollHeight;
-  
+
   if (container.children.length > 500) {
     container.removeChild(container.firstChild);
   }
@@ -515,7 +520,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     item.classList.add('active');
     document.getElementById('page-' + page).classList.add('active');
-    
+
     const titles = {
       overview: 'Dashboard Overview',
       control: 'Bot Control',
@@ -527,9 +532,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
       templates: 'Templates',
       logs: 'Live Logs'
     };
-    
+
     document.getElementById('pageTitle').textContent = titles[page];
-    
+
     // Auto-load commands list when visiting commands page
     if (page === 'commands') {
       loadCommands();

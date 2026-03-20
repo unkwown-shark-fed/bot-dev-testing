@@ -1,10 +1,10 @@
-const { Client, GatewayIntentBits, Partials, Collection, PermissionFlagsBits, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, PermissionFlagsBits } = require('discord.js');
 require('dotenv').config();
-const path   = require('path');
-const fs     = require('fs');
+const path = require('path');
+const fs = require('fs');
 const logger = require('./logger');
 const config = require('./config.json');
-const db     = require('./db');
+const db = require('./db');
 const { loadCommandModules } = require('./utils/command-loader');
 
 const token = process.env.DISCORD_TOKEN;
@@ -37,14 +37,31 @@ client.stats = {
 // ── Dashboard log helper ──────────────────────────────────────────────────────
 // Sends a log entry to the dashboard which forwards it to your configured
 // log channel as a Discord embed. Non-fatal — never crashes the bot.
-const DASHBOARD_URL  = process.env.DASHBOARD_URL  || 'http://localhost:3000';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:3000';
 const DASHBOARD_PASS = process.env.DASHBOARD_PASSWORD || '';
+const ACTIVITY_TYPES = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
+const PRESENCE_UPDATE_FILE = path.join(__dirname, '.presence_update.json');
+
+function getUtcDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildPresence({ status, acttype, acttext }) {
+  return {
+    status: status || 'online',
+    activities: acttext ? [{ name: acttext, type: ACTIVITY_TYPES[acttype] ?? 2 }] : [],
+  };
+}
+
+function applyPresence(clientInstance, settings) {
+  clientInstance.user.setPresence(buildPresence(settings));
+}
 
 async function logCommandUse({ command, user, guild, channel, args = '', error = null }) {
   if (!DASHBOARD_PASS) return;
 
   try {
-    await fetch(`${DASHBOARD_URL}/api/log`, {
+    const response = await fetch(`${DASHBOARD_URL}/api/log`, {
       method:  'POST',
       signal: AbortSignal.timeout(3000),
       headers: {
@@ -53,7 +70,13 @@ async function logCommandUse({ command, user, guild, channel, args = '', error =
       },
       body: JSON.stringify({ command, user, guild, channel, args, error }),
     });
-  } catch (_) {} // never crash the bot over logging
+
+    if (!response.ok) {
+      logger.warn(`Dashboard log request failed with status ${response.status}`);
+    }
+  } catch (err) {
+    logger.warn(`Dashboard log request failed: ${err.message}`);
+  }
 }
 
 // ── Command source mode ────────────────────────────────────────────────────────
@@ -97,19 +120,19 @@ const dbLoadPromise = (async () => {
 
     for (const record of dbCmds) {
       if (record.source !== 'dashboard' || !record.code) continue;
-      if (client.commands.has(record.name)) continue;
 
       try {
         const Module = require('module');
-        const filename = path.join(commandsPath, `${record.name}.js`);
-        const m      = new Module(filename);
-        m.filename   = filename;
-        m.path       = path.dirname(filename);
-        m.paths      = Module._nodeModulePaths(m.path);
-        m._compile(record.code, filename);
+        const m = new Module('');
+        m.filename = path.join(commandsPath, `${record.name}.js`);
+        m.paths = Module._nodeModulePaths(commandsPath);
+        m._compile(record.code, `${record.name}.js`);
         const cmd = m.exports;
 
         if (cmd?.data?.name && typeof cmd.execute === 'function') {
+          if (client.commands.has(cmd.data.name)) {
+            logger.warn(`DB command ${cmd.data.name} overrides existing file command with the same name`);
+          }
           client.commands.set(cmd.data.name, cmd);
           client.stats.commandUsage[cmd.data.name] = 0;
           dbCount++;
@@ -141,14 +164,10 @@ client.once('ready', async () => {
 
   // Apply saved presence from config.json on startup
   try {
-    const activityTypes = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
-    const status  = config.status  || 'online';
+    const status = config.status || 'online';
     const acttype = config.acttype || 'Listening';
     const acttext = config.acttext || '';
-    client.user.setPresence({
-      status,
-      activities: acttext ? [{ name: acttext, type: activityTypes[acttype] ?? 2 }] : [],
-    });
+    applyPresence(client, { status, acttype, acttext });
     logger.info(`🟢 Presence set: ${status} / ${acttype} ${acttext}`);
   } catch (e) {
     logger.warn(`Failed to set initial presence: ${e.message}`);
@@ -160,24 +179,39 @@ client.once('ready', async () => {
   // without needing a bot restart.
   setInterval(() => {
     try {
-      const pFile = path.join(__dirname, '.presence_update.json');
-      if (!fs.existsSync(pFile)) return;
+      if (!fs.existsSync(PRESENCE_UPDATE_FILE)) return;
 
-      const { status, acttype, acttext, ts } = JSON.parse(fs.readFileSync(pFile, 'utf8'));
+      const { status, acttype, acttext, ts } = JSON.parse(fs.readFileSync(PRESENCE_UPDATE_FILE, 'utf8'));
       // Only apply if written within the last 60 seconds
-      if (Date.now() - ts > 60_000) return;
+      if (typeof ts !== 'number' || Date.now() - ts > 60_000) return;
 
-      const activityTypes = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
-      client.user.setPresence({
-        status: status || 'online',
-        activities: acttext ? [{ name: acttext, type: activityTypes[acttype] ?? 2 }] : [],
-      });
+      applyPresence(client, { status, acttype, acttext });
       logger.info(`[presence] Updated: ${status} / ${acttype} ${acttext}`);
-      fs.unlinkSync(pFile); // delete after applying so it doesn't re-trigger
+      fs.unlinkSync(PRESENCE_UPDATE_FILE); // delete after applying so it doesn't re-trigger
     } catch (e) {
       logger.warn(`[presence] Failed to apply update: ${e.message}`);
     }
   }, 15_000); // checks every 15 seconds
+
+  // ── Daily member snapshot tracker (UTC) ───────────────────────────────────
+  // Stores one memberCount snapshot per guild per day so /membertrend can
+  // report historical daily totals.
+  async function captureDailyMemberSnapshots() {
+    const dateKey = getUtcDateKey(new Date());
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        const memberCount = guild.memberCount || 0;
+        await db.upsertMemberSnapshot(guild.id, dateKey, memberCount);
+      } catch (e) {
+        logger.warn(`[membertrend] Snapshot failed for guild ${guild.id}: ${e.message}`);
+      }
+    }
+    logger.info(`[membertrend] Daily snapshots upserted for ${client.guilds.cache.size} guild(s) on ${dateKey}`);
+  }
+
+  // Run once on startup, then hourly. Upsert prevents duplicates for same day.
+  await captureDailyMemberSnapshots();
+  setInterval(captureDailyMemberSnapshots, 60 * 60 * 1000);
 });
 
 // ── Interaction handler ───────────────────────────────────────────────────────
@@ -229,7 +263,7 @@ client.on('interactionCreate', async interaction => {
   const requiredRoleId = config.commandRoleId || process.env.COMMAND_ROLE_ID || '';
   if (requiredRoleId) {
     try {
-      const member  = interaction.member;
+      const member = interaction.member;
       const isAdmin = member.permissions?.has?.(PermissionFlagsBits.Administrator);
       const hasRole = member.roles?.cache?.has?.(requiredRoleId);
       if (!isAdmin && !hasRole) {
