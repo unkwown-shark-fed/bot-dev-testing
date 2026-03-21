@@ -1,8 +1,12 @@
 // Complete Premium Dashboard JavaScript
-let token = localStorage.getItem('dashboardToken');
+let token = null;
 let ws = null;
 
-if (token) checkAuth();
+checkAuth();
+
+function authHeaders(extra = {}) {
+  return token ? { ...extra, 'Authorization': `Bearer ${token}` } : { ...extra };
+}
 
 // === LOGIN ===
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -16,8 +20,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     });
     const data = await res.json();
     if (data.success) {
-      token = data.token;
-      localStorage.setItem('dashboardToken', token);
+      token = null;
       showDashboard();
     } else {
       document.getElementById('loginError').textContent = 'Invalid password';
@@ -31,9 +34,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
 async function checkAuth() {
   try {
-    const res = await fetch('/api/status', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await fetch('/api/status', { headers: authHeaders() });
     if (res.ok) showDashboard();
     else logout();
   } catch {
@@ -55,11 +56,10 @@ async function logout() {
     if (token) {
       await fetch('/api/logout', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: authHeaders()
       });
     }
   } catch (_) {}
-  localStorage.removeItem('dashboardToken');
   location.reload();
 }
 
@@ -77,7 +77,7 @@ function connectWebSocket() {
 // === STATUS ===
 async function updateStatus() {
   try {
-    const res = await fetch('/api/status', { headers: { 'Authorization': `Bearer ${token}` }});
+    const res = await fetch('/api/status', { headers: authHeaders() });
     const data = await res.json();
     const badge = document.getElementById('botStatus');
     const startBtn = document.getElementById('startBtn');
@@ -105,7 +105,7 @@ async function updateStatus() {
 
 async function updateStats() {
   try {
-    const res = await fetch('/api/stats', { headers: { 'Authorization': `Bearer ${token}` }});
+    const res = await fetch('/api/stats', { headers: authHeaders() });
     const data = await res.json();
     document.getElementById('statsCommands').textContent = data.totalCommands ?? data.commands ?? 0;
     document.getElementById('statsGuilds').textContent = data.guilds;
@@ -120,7 +120,7 @@ async function startBot() {
   try {
     const res = await fetch('/api/start', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: authHeaders()
     });
     const data = await res.json();
     alert(data.message || 'Bot started');
@@ -133,7 +133,7 @@ async function stopBot() {
   try {
     const res = await fetch('/api/stop', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: authHeaders()
     });
     const data = await res.json();
     alert(data.message || 'Bot stopped');
@@ -151,7 +151,7 @@ async function restartBot() {
 async function loadCommands() {
   try {
     const res = await fetch('/api/commands', {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: authHeaders()
     });
     const data = await res.json();
     const container = document.getElementById('commandsList');
@@ -185,7 +185,7 @@ async function loadCommands() {
 async function editCommand(name) {
   try {
     const res = await fetch(`/api/commands/${name}/content`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: authHeaders()
     });
     const data = await res.json();
 
@@ -211,7 +211,7 @@ async function deleteCommand(name) {
   try {
     const res = await fetch(`/api/commands/${name}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: authHeaders()
     });
     const data = await res.json();
 
@@ -296,10 +296,7 @@ async function saveCommand() {
   try {
     const res = await fetch('/api/save-command', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         name: window.generatedCommandName,
         code: window.generatedCommandCode
