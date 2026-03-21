@@ -171,17 +171,26 @@ async function sendDiscordLoginLog({ req, discordUser }) {
     ? `${discordUser.username}#${discordUser.discriminator}`
     : (discordUser.global_name ? `${discordUser.username} (${discordUser.global_name})` : discordUser.username);
 
+  const compactUa = userAgent.length > 250 ? `${userAgent.slice(0, 247)}...` : userAgent;
   const embed = {
-    color: 0x5865F2,
-    title: '🔐 Discord OAuth Login',
+    color: 0x57F287,
+    author: {
+      name: 'Dashboard Security',
+      icon_url: 'https://cdn.discordapp.com/emojis/1106956493841944606.png',
+    },
+    title: '🔐 New Discord OAuth Login',
+    description: `**${profileTag}** authenticated successfully.`,
+    thumbnail: discordUser.avatar
+      ? { url: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png?size=256` }
+      : undefined,
     fields: [
-      { name: 'User', value: `${profileTag} (\`${discordUser.id}\`)` },
-      { name: 'IP', value: `\`${ipAddress}\``, inline: true },
-      { name: 'Auth Method', value: 'Discord OAuth', inline: true },
-      { name: 'User Agent', value: userAgent.slice(0, 1024) },
+      { name: '👤 Account', value: `${profileTag}\nID: \`${discordUser.id}\`` },
+      { name: '🧩 Method', value: '`Discord OAuth`', inline: true },
+      { name: '🌐 IP Address', value: `\`${ipAddress}\``, inline: true },
+      { name: '🖥️ User Agent', value: `\`${compactUa}\`` },
     ],
     timestamp: new Date().toISOString(),
-    footer: { text: 'Dashboard Login Log' },
+    footer: { text: 'Dashboard Login Audit Log' },
   };
 
   await rest.post(Routes.channelMessages(channelId), { body: { embeds: [embed] } });
