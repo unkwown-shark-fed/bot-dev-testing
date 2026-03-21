@@ -40,12 +40,8 @@ const DISCORD_OAUTH_CLIENT_ID = process.env.DISCORD_OAUTH_CLIENT_ID || CLIENT_ID
 const DISCORD_OAUTH_CLIENT_SECRET = process.env.DISCORD_OAUTH_CLIENT_SECRET || '';
 const DISCORD_OAUTH_CALLBACK_URL = process.env.DISCORD_OAUTH_CALLBACK_URL || `http://localhost:${PORT}/api/auth/discord/callback`;
 const DISCORD_LOGIN_LOG_CHANNEL = process.env.DISCORD_LOGIN_LOG_CHANNEL || process.env.LOGIN_LOG_CHANNEL || '';
-const BOT_LOG_INGEST_TOKEN = process.env.BOT_LOG_INGEST_TOKEN || '';
 const discordOAuthEnabled = Boolean(DISCORD_OAUTH_CLIENT_ID && DISCORD_OAUTH_CLIENT_SECRET);
 const discordOAuthStates = new Map();
-const COOKIE_NAME = 'bst';
-const IS_PROD = process.env.NODE_ENV === 'production';
-const ALLOWED_ORIGIN = process.env.DASHBOARD_ORIGIN || '';
 
 if (!PASSWORD) {
   console.error('❌ DASHBOARD_PASSWORD is required in environment. Refusing to start dashboard.');
@@ -88,17 +84,6 @@ function getScheduleModel() {
 
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
-if (String(process.env.TRUST_PROXY || '').toLowerCase() === 'true') {
-  app.set('trust proxy', true);
-}
-app.use((req, res, next) => {
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'same-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-  next();
-});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(ROOT, 'public'), {
   etag: false,
@@ -121,71 +106,18 @@ app.get('/', (_req, res) => {
 
 function auth(req, res, next) {
   const authHeader = (req.headers.authorization || '').trim();
-  const bearerToken = authHeader.startsWith('Bearer ')
-    ? authHeader.slice('Bearer '.length).trim()
-    : '';
-  const cookieToken = getCookie(req, COOKIE_NAME);
-  const token = bearerToken || cookieToken;
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  if (!authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim();
   if (!dashboardAuth.authenticateBearerToken(token)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  setDashboardCookie(res, token, SESSION_TTL_MS);
   req.dashboardToken = token;
   next();
 }
-
-function getCookie(req, name) {
-  const cookieHeader = req.headers.cookie || '';
-  const parts = cookieHeader.split(';');
-  for (const part of parts) {
-    const [k, ...v] = part.trim().split('=');
-    if (k === name) return decodeURIComponent(v.join('='));
-  }
-  return '';
-}
-
-function setDashboardCookie(res, token, maxAgeMs) {
-  const cookieParts = [
-    `${COOKIE_NAME}=${encodeURIComponent(token)}`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Strict',
-    `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
-  ];
-  if (IS_PROD) cookieParts.push('Secure');
-  res.setHeader('Set-Cookie', cookieParts.join('; '));
-}
-
-function clearDashboardCookie(res) {
-  const cookieParts = [
-    `${COOKIE_NAME}=`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Strict',
-    'Max-Age=0',
-  ];
-  if (IS_PROD) cookieParts.push('Secure');
-  res.setHeader('Set-Cookie', cookieParts.join('; '));
-}
-
-function csrfGuard(req, res, next) {
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
-  const origin = String(req.headers.origin || '');
-  if (ALLOWED_ORIGIN && origin && origin !== ALLOWED_ORIGIN) {
-    return res.status(403).json({ error: 'Origin not allowed' });
-  }
-  if (!ALLOWED_ORIGIN && origin) {
-    const expectedOrigin = `${req.protocol}://${req.get('host')}`;
-    if (origin !== expectedOrigin) {
-      return res.status(403).json({ error: 'Origin not allowed' });
-    }
-  }
-  next();
-}
-
-app.use(csrfGuard);
 
 // ── Bot process ───────────────────────────────────────────────────────────────
 let botProcess = null;
@@ -281,8 +213,7 @@ app.post('/api/login', (req, res) =>
     const ip = getRequestIp(req);
     const result = dashboardAuth.login({ passwordAttempt: req.body?.password, ip });
     if (!result.ok) return res.status(result.status).json({ error: result.error });
-    setDashboardCookie(res, result.token, result.expiresInSeconds * 1000);
-    return res.json({ success: true, expiresInSeconds: result.expiresInSeconds });
+    return res.json({ success: true, token: result.token, expiresInSeconds: result.expiresInSeconds });
   }
 );
 
@@ -362,8 +293,11 @@ app.get('/api/auth/discord/callback', async (req, res) => {
     }
 
     const session = dashboardAuth.createSessionToken();
-    setDashboardCookie(res, session.token, session.expiresInSeconds * 1000);
-    return res.redirect('/');
+    const redirectParams = new URLSearchParams({
+      discordToken: session.token,
+      expiresInSeconds: String(session.expiresInSeconds),
+    });
+    return res.redirect(`/?${redirectParams.toString()}`);
   } catch (_) {
     return res.redirect('/?loginError=discord_oauth_request_failed');
   }
@@ -371,7 +305,6 @@ app.get('/api/auth/discord/callback', async (req, res) => {
 
 app.post('/api/logout', auth, (req, res) => {
   dashboardAuth.logout(req.dashboardToken);
-  clearDashboardCookie(res);
   res.json({ success: true });
 });
 
@@ -1744,12 +1677,7 @@ const server = app.listen(PORT, async () => {
 let wss;
 server.on('listening', () => {
   wss = new WebSocket.Server({ server });
-  wss.on('connection', (ws, req) => {
-    const token = getCookie(req, COOKIE_NAME);
-    if (!token || !dashboardAuth.authenticateBearerToken(token)) {
-      ws.close(1008, 'Unauthorized');
-      return;
-    }
+  wss.on('connection', ws => {
     ws.send(JSON.stringify({ type: 'status', data: { status: botStatus } }));
   });
 });
@@ -1828,9 +1756,8 @@ runScheduler();                        // also fire on startup
 // Your index.js should POST to /api/log with: { command, user, guild, channel, args }
 // The dashboard will forward this to the configured logch channel.
 function authBotLog(req, res, next) {
-  const expectedToken = BOT_LOG_INGEST_TOKEN || PASSWORD;
   const authHeader = (req.headers.authorization || '').trim();
-  if (authHeader !== `Bearer ${expectedToken}`) {
+  if (authHeader !== `Bearer ${PASSWORD}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   return next();

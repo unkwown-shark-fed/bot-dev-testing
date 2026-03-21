@@ -1126,7 +1126,7 @@ input[type=color] { cursor: pointer; }
 'use strict';
 
 // ── STATE ─────────────────────────────────────────────────────────────────
-let TOK   = null;
+let TOK   = localStorage.getItem('bst');
 let opts  = [];
 let btns  = [];
 let conds = [];
@@ -1134,6 +1134,15 @@ let acts  = [];
 let pTimer = null;
 
 const urlParams = new URLSearchParams(location.search);
+const discordSessionToken = urlParams.get('discordToken');
+if (discordSessionToken) {
+  TOK = discordSessionToken;
+  localStorage.setItem('bst', TOK);
+  urlParams.delete('discordToken');
+  urlParams.delete('expiresInSeconds');
+  const qs = urlParams.toString();
+  history.replaceState({}, '', `${location.pathname}${qs ? `?${qs}` : ''}`);
+}
 
 // ── MOBILE BUILDER TABS ────────────────────────────────────────────────────
 let activeBPanel = 'config';
@@ -1233,7 +1242,8 @@ async function login() {
       return;
     }
 
-    TOK = null;
+    TOK = d.token;
+    localStorage.setItem('bst', TOK);
     showApp();
   } catch (_) {
     errEl.textContent = 'Connection failed';
@@ -1274,7 +1284,7 @@ async function setupDiscordLogin() {
   }
 }
 setupDiscordLogin();
-function logout() { TOK = null; location.reload(); }
+function logout() { TOK = null; localStorage.removeItem('bst'); location.reload(); }
 
 function api(url, o = {}) {
   const headers = { 'Content-Type': 'application/json', ...(o.headers||{}) };
@@ -1297,9 +1307,24 @@ function showApp() {
   loadLogFiles();
 }
 
-api('/api/status').then(r => {
-  if (r.ok) showApp();
-}).catch(() => {});
+if (TOK) {
+  const snapshot = TOK;
+  api('/api/status').then(r => {
+    if (r.ok) {
+      showApp();
+      return;
+    }
+    if (TOK === snapshot) {
+      TOK = null;
+      localStorage.removeItem('bst');
+    }
+  }).catch(() => {
+    if (TOK === snapshot) {
+      TOK = null;
+      localStorage.removeItem('bst');
+    }
+  });
+}
 
 // ── NAV ────────────────────────────────────────────────────────────────────
 let activeNav = 'builder';

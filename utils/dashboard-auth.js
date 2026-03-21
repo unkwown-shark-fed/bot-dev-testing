@@ -55,7 +55,7 @@ function createDashboardAuth({
       return { ok: false, status: 429, error: 'Too many login attempts. Try again later.' };
     }
 
-    if (!safeCompare(String(passwordAttempt || ''), String(password))) {
+    if (passwordAttempt !== password) {
       recordFailedAttempt(ip);
       return { ok: false, status: 401, error: 'Invalid password' };
     }
@@ -87,13 +87,6 @@ function createDashboardAuth({
     authenticateBearerToken,
     logout,
   };
-}
-
-function safeCompare(a, b) {
-  const aBuf = Buffer.from(String(a));
-  const bBuf = Buffer.from(String(b));
-  if (aBuf.length !== bBuf.length) return false;
-  return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
 module.exports = {
