@@ -135,6 +135,7 @@ Notes:
 | `ERROR_LOG_FILE` | Error log file path | logs/error.log |
 | `LOG_LEVEL` | Logging level (error/warn/info/debug) | info |
 | `DASHBOARD_PASSWORD` | Auth token/password required by premium dashboard API | Required for dashboard |
+| `DISCORD_LOGIN_LOG_CHANNEL` | Optional channel name/ID for Discord OAuth login alerts from dashboard | unset (disabled) |
 
 ---
 
