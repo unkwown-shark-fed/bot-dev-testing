@@ -39,7 +39,7 @@ client.stats = {
 // Sends a log entry to the dashboard which forwards it to your configured
 // log channel as a Discord embed. Non-fatal — never crashes the bot.
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:3000';
-const DASHBOARD_PASS = process.env.DASHBOARD_PASSWORD || '';
+const DASHBOARD_PASS = process.env.BOT_LOG_INGEST_TOKEN || process.env.DASHBOARD_PASSWORD || '';
 const ACTIVITY_TYPES = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
 const PRESENCE_UPDATE_FILE = path.join(__dirname, '.presence_update.json');
 
