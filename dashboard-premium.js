@@ -39,6 +39,7 @@ const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).fi
 const DISCORD_OAUTH_CLIENT_ID = process.env.DISCORD_OAUTH_CLIENT_ID || CLIENT_ID || '';
 const DISCORD_OAUTH_CLIENT_SECRET = process.env.DISCORD_OAUTH_CLIENT_SECRET || '';
 const DISCORD_OAUTH_CALLBACK_URL = process.env.DISCORD_OAUTH_CALLBACK_URL || `http://localhost:${PORT}/api/auth/discord/callback`;
+const DISCORD_LOGIN_LOG_CHANNEL = process.env.DISCORD_LOGIN_LOG_CHANNEL || process.env.LOGIN_LOG_CHANNEL || '';
 const discordOAuthEnabled = Boolean(DISCORD_OAUTH_CLIENT_ID && DISCORD_OAUTH_CLIENT_SECRET);
 const discordOAuthStates = new Map();
 
@@ -132,6 +133,60 @@ function broadcast(type, data) {
   wss?.clients?.forEach(c => c.readyState === 1 && c.send(JSON.stringify({ type, data })));
 }
 
+async function resolveChannelIdByNameOrId(channelNameOrId) {
+  if (!TOKEN || !GUILD_IDS.length || !channelNameOrId) return null;
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+  for (const gid of GUILD_IDS) {
+    try {
+      const chs = await rest.get(Routes.guildChannels(gid));
+      const match = chs.find(c => c.name === channelNameOrId || c.id === channelNameOrId);
+      if (match) return match.id;
+    } catch (_) {}
+  }
+  return null;
+}
+
+function getRequestIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+}
+
+async function sendDiscordLoginLog({ req, discordUser }) {
+  if (!discordUser || !TOKEN || !GUILD_IDS.length) return;
+
+  const configuredLogChannel = DISCORD_LOGIN_LOG_CHANNEL;
+  if (!configuredLogChannel) return;
+
+  const channelId = await resolveChannelIdByNameOrId(configuredLogChannel);
+  if (!channelId) return;
+
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+  const ipAddress = getRequestIp(req);
+  const userAgent = String(req.headers['user-agent'] || '').trim() || 'Unknown';
+  const profileTag = discordUser.discriminator && discordUser.discriminator !== '0'
+    ? `${discordUser.username}#${discordUser.discriminator}`
+    : (discordUser.global_name ? `${discordUser.username} (${discordUser.global_name})` : discordUser.username);
+
+  const embed = {
+    color: 0x5865F2,
+    title: '🔐 Discord OAuth Login',
+    fields: [
+      { name: 'User', value: `${profileTag} (\`${discordUser.id}\`)` },
+      { name: 'IP', value: `\`${ipAddress}\``, inline: true },
+      { name: 'Auth Method', value: 'Discord OAuth', inline: true },
+      { name: 'User Agent', value: userAgent.slice(0, 1024) },
+    ],
+    timestamp: new Date().toISOString(),
+    footer: { text: 'Dashboard Login Log' },
+  };
+
+  await rest.post(Routes.channelMessages(channelId), { body: { embeds: [embed] } });
+}
+
 function spawnBot() {
   botProcess = spawn('node', ['index.js'], { cwd: ROOT, env: { ...process.env } });
   botProcess.startTime = Date.now();
@@ -155,7 +210,7 @@ function spawnBot() {
 // ── Auth & Status ─────────────────────────────────────────────────────────────
 app.post('/api/login', (req, res) =>
   {
-    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const ip = getRequestIp(req);
     const result = dashboardAuth.login({ passwordAttempt: req.body?.password, ip });
     if (!result.ok) return res.status(result.status).json({ error: result.error });
     return res.json({ success: true, token: result.token, expiresInSeconds: result.expiresInSeconds });
@@ -228,6 +283,13 @@ app.get('/api/auth/discord/callback', async (req, res) => {
     });
     if (!meRes.ok) {
       return res.redirect('/?loginError=discord_oauth_user_lookup_failed');
+    }
+    const meData = await meRes.json();
+
+    try {
+      await sendDiscordLoginLog({ req, discordUser: meData });
+    } catch (e) {
+      addLog('warn', `[auth] Failed to post Discord login log: ${e.message}`);
     }
 
     const session = dashboardAuth.createSessionToken();
