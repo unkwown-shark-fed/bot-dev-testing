@@ -576,6 +576,140 @@ input[type=color] { cursor: pointer; }
 .ep-btn-link      { background:transparent; color:#00aafc; border:1px solid #4e5058; }
 .ep-btn-link::after { content:' ↗'; font-size:11px; opacity:.7; }
 
+
+
+/* ── UI REVAMP v4 (high-contrast + new layout) ─────────────────────────── */
+:root {
+  --bg0: #02050f;
+  --bg1: #09122a;
+  --bg2: #111e42;
+  --bg3: #1a2d5f;
+  --bg4: #22407f;
+  --line: rgba(128, 152, 255, .32);
+  --line2: rgba(132, 210, 255, .54);
+  --acc: #8a7bff;
+  --acc2: #37d6ff;
+  --t1: #f7f9ff;
+  --t2: #bfcbf8;
+  --t3: #8ea2dd;
+  --sidebar-w: 256px;
+  --tbar-h: 58px;
+  --glow: 0 24px 56px rgba(5, 14, 43, .55);
+}
+
+body {
+  background:
+    radial-gradient(circle at 7% 14%, rgba(113, 92, 255, .24) 0%, transparent 34%),
+    radial-gradient(circle at 93% 10%, rgba(55, 214, 255, .24) 0%, transparent 38%),
+    radial-gradient(circle at 50% 110%, rgba(81, 107, 255, .18) 0%, transparent 40%),
+    linear-gradient(145deg, #02050f 0%, #0a1330 46%, #070f24 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(rgba(140, 164, 255, .04) 1px, transparent 1px), linear-gradient(90deg, rgba(140, 164, 255, .04) 1px, transparent 1px);
+  background-size: 36px 36px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.tbar {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+.tbar-brand { display: flex; align-items: center; gap: 10px; min-width: max-content; }
+.tbar-chip {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #c7f4ff;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(132, 210, 255, .4);
+  background: linear-gradient(130deg, rgba(43, 82, 195, .42), rgba(26, 149, 179, .28));
+}
+
+.lcard,
+.cpanel,
+.cpanel-right,
+.canvas-wrap,
+.scard,
+.tcard,
+.tpl,
+.sched-card,
+.mcard,
+.logbox,
+.ep-wrap,
+.stat,
+.lib-item,
+.cmd-card {
+  border-color: var(--line) !important;
+  box-shadow: var(--glow);
+}
+
+.pg-scroll {
+  margin: 16px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(9, 15, 36, .88), rgba(8, 13, 30, .95));
+}
+
+.ttab { border-radius: 10px; }
+.ttab.on {
+  background: linear-gradient(135deg, rgba(84, 120, 255, .34), rgba(55, 214, 255, .22));
+  border-color: var(--line2);
+}
+
+.finput, .fsel, .ftextarea, .lf-input {
+  background: rgba(8, 17, 43, .96);
+  border: 1px solid rgba(127, 153, 240, .4);
+}
+
+.finput:focus, .fsel:focus, .ftextarea:focus, .lf-input:focus {
+  border-color: var(--acc2);
+  box-shadow: 0 0 0 4px rgba(55, 214, 255, .16);
+}
+
+.cbtn, .sbtn, .tbtn, .lbtn, .ldiscord {
+  border: 1px solid rgba(132, 210, 255, .45);
+  background: linear-gradient(135deg, rgba(52, 88, 209, .82), rgba(79, 60, 209, .86));
+}
+
+.snav-item {
+  border-left-width: 4px;
+  border-left-color: transparent;
+}
+
+.snav-item.on {
+  background: linear-gradient(90deg, rgba(83, 112, 255, .3), rgba(55, 214, 255, .08));
+  border-left-color: var(--acc2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(55, 214, 255, .95), rgba(138, 123, 255, .92));
+}
+
+@media (min-width: 901px) {
+  .ham,
+  .tbar-tabs {
+    display: none;
+  }
+
+  .sidebar {
+    display: flex;
+    transform: none;
+    top: var(--tbar-h);
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(8, 14, 34, .96), rgba(9, 14, 33, .9));
+  }
+
+  .sidebar-overlay { display: none !important; }
+  .pages { margin-left: var(--sidebar-w); }
+}
+
 @media (max-width:600px) {
   .settings-grid { grid-template-columns:1fr; }
   #pg-embeds { flex-direction:column !important; height:auto !important; overflow:visible !important; }
@@ -632,7 +766,10 @@ input[type=color] { cursor: pointer; }
     <button class="ham" id="ham" onclick="toggleSidebar()" aria-label="Menu">
       <span></span><span></span><span></span>
     </button>
-    <span class="tbar-logo">⚡ Studio</span>
+    <div class="tbar-brand">
+      <span class="tbar-logo">⚡ Studio</span>
+      <span class="tbar-chip">Revamped UI</span>
+    </div>
 
     <!-- Desktop tabs -->
     <nav class="tbar-tabs">
