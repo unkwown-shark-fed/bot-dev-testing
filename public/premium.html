@@ -35,6 +35,8 @@
   --m:     'IBM Plex Mono', monospace;
   --r:     10px;
   --r2:    14px;
+  --r3:    18px;
+  --glow:  0 14px 40px rgba(27, 64, 166, .35);
   --tbar-h: 52px;
   --sidebar-w: 220px;
 }
@@ -174,7 +176,10 @@ input[type=color] { cursor: pointer; }
 .pages { flex: 1; min-width: 0; }
 .pg { display: none; min-height: calc(100vh - var(--tbar-h)); }
 .pg.on { display: flex; }
-.pg-scroll { flex: 1; overflow-y: auto; padding: 24px 20px; min-width: 0; }
+.pg-scroll {
+  flex: 1; overflow-y: auto; padding: 24px 20px 28px; min-width: 0;
+  max-width: 1500px; width: 100%; margin: 0 auto;
+}
 
 /* ── BUILDER PAGE ───────────────────────────────────────────────────────── */
 #pg-builder { flex-direction: row; overflow: hidden; height: calc(100vh - var(--tbar-h)); }
@@ -208,10 +213,13 @@ input[type=color] { cursor: pointer; }
 .flabel { font-size: 11px; font-weight: 600; color: var(--t2); margin-bottom: 5px; display: flex; justify-content: space-between; }
 .flabel .fsub { color: var(--t3); font-weight: 400; font-size: 10px; }
 .finput, .fsel, .ftextarea {
-  width: 100%; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--line);
-  border-radius: 8px; color: var(--t1); font-size: 12px; transition: border-color .2s;
+  width: 100%; padding: 9px 11px; background: rgba(15, 28, 72, .85); border: 1px solid var(--line);
+  border-radius: 10px; color: var(--t1); font-size: 12px; transition: border-color .2s, box-shadow .2s;
 }
-.finput:focus, .fsel:focus, .ftextarea:focus { border-color: var(--acc); background: var(--bg4); }
+.finput:focus, .fsel:focus, .ftextarea:focus {
+  border-color: var(--acc2); background: rgba(22, 43, 107, .92);
+  box-shadow: 0 0 0 3px rgba(86,204,242,.16);
+}
 .fsel { cursor: pointer; -webkit-appearance: none; }
 .ftextarea { resize: vertical; min-height: 64px; line-height: 1.55; font-size: 11.5px; }
 .crow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -236,7 +244,7 @@ input[type=color] { cursor: pointer; }
 
 .sbtn {
   display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px;
-  background: var(--bg4); border: 1px solid var(--line2); border-radius: 7px;
+  background: linear-gradient(135deg, rgba(38,57,122,.95), rgba(48,74,150,.95)); border: 1px solid var(--line2); border-radius: 999px;
   color: var(--t2); font-size: 11px; font-weight: 600; transition: all .15s;
 }
 .sbtn:hover { color: var(--t1); border-color: var(--acc); }
@@ -351,12 +359,27 @@ input[type=color] { cursor: pointer; }
 
 /* ── NON-BUILDER PAGES ─────────────────────────────────────────────────── */
 .pg-title { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
-.pg-sub   { color: var(--t2); font-size: 13px; margin-bottom: 20px; }
+.pg-title {
+  background: linear-gradient(90deg, #f4f7ff, #87dcff 42%, #a58bff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.pg-sub   { color: var(--t2); font-size: 13px; margin-bottom: 20px; max-width: 70ch; }
 .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .cmd-card {
   background: linear-gradient(145deg, rgba(86,204,242,.09), rgba(123,97,255,.08) 45%, rgba(0,0,0,.05));
   border: 1px solid rgba(135,160,255,.42); border-radius: 12px; padding: 16px;
   transition: border-color .2s, transform .15s, box-shadow .15s;
+  position: relative;
+  overflow: hidden;
+}
+.cmd-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--acc), var(--acc2), transparent);
 }
 .cmd-card:hover { border-color: var(--acc2); transform: translateY(-1px); box-shadow: 0 10px 28px rgba(21,42,110,.3); }
 .cmd-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; color: var(--acc2); font-family: var(--m); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -379,9 +402,14 @@ input[type=color] { cursor: pointer; }
 /* ── CONTROL PAGE ───────────────────────────────────────────────────────── */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 20px; }
 .stat-box { background: linear-gradient(155deg, rgba(86,204,242,.12), rgba(123,97,255,.13) 40%, rgba(17,32,70,.8)); border: 1px solid rgba(126,154,255,.45); border-radius: 12px; padding: 16px; }
+.stat-box { box-shadow: inset 0 1px 0 rgba(255,255,255,.06), var(--glow); }
 .stat-val { font-size: 24px; font-weight: 800; margin-bottom: 3px; font-family: var(--m); }
 .stat-key { font-size: 11px; color: var(--t2); }
 .ctrl-card { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: 500px; margin-bottom: 14px; }
+.ctrl-card {
+  background: linear-gradient(145deg, rgba(86,204,242,.08), rgba(123,97,255,.08) 48%, rgba(15,27,63,.9));
+  border-color: rgba(129,156,255,.45);
+}
 .ctrl-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 14px; }
 .ctrl-btns { display: flex; gap: 10px; flex-wrap: wrap; }
 .cbtn {
@@ -412,6 +440,7 @@ input[type=color] { cursor: pointer; }
 .toast {
   padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 600;
   animation: tIn .3s ease; pointer-events: auto; word-break: break-word;
+  backdrop-filter: blur(6px);
 }
 .toast.ok  { background: rgba(45,212,160,.12); border: 1px solid rgba(45,212,160,.35); color: var(--grn); }
 .toast.err { background: rgba(240,96,128,.12); border: 1px solid rgba(240,96,128,.35); color: var(--red); }
