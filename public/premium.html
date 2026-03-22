@@ -578,160 +578,136 @@ input[type=color] { cursor: pointer; }
 
 
 
-/* ── UI REVAMP v3 ───────────────────────────────────────────────────────── */
+/* ── UI REVAMP v4 (high-contrast + new layout) ─────────────────────────── */
 :root {
-  --bg0: #040712;
-  --bg1: #0d1531;
-  --bg2: #141f45;
-  --bg3: #1c2a58;
-  --bg4: #22356f;
-  --line: rgba(138, 160, 255, .25);
-  --line2: rgba(156, 184, 255, .4);
-  --acc: #8b7bff;
-  --acc2: #54d4ff;
-  --t1: #eef3ff;
-  --t2: #b6c4f0;
-  --t3: #8ea0d9;
-  --glow: 0 20px 48px rgba(26, 53, 142, .42);
+  --bg0: #02050f;
+  --bg1: #09122a;
+  --bg2: #111e42;
+  --bg3: #1a2d5f;
+  --bg4: #22407f;
+  --line: rgba(128, 152, 255, .32);
+  --line2: rgba(132, 210, 255, .54);
+  --acc: #8a7bff;
+  --acc2: #37d6ff;
+  --t1: #f7f9ff;
+  --t2: #bfcbf8;
+  --t3: #8ea2dd;
+  --sidebar-w: 256px;
+  --tbar-h: 58px;
+  --glow: 0 24px 56px rgba(5, 14, 43, .55);
 }
 
-body::before,
-body::after {
+body {
+  background:
+    radial-gradient(circle at 7% 14%, rgba(113, 92, 255, .24) 0%, transparent 34%),
+    radial-gradient(circle at 93% 10%, rgba(55, 214, 255, .24) 0%, transparent 38%),
+    radial-gradient(circle at 50% 110%, rgba(81, 107, 255, .18) 0%, transparent 40%),
+    linear-gradient(145deg, #02050f 0%, #0a1330 46%, #070f24 100%);
+}
+
+body::before {
   content: '';
   position: fixed;
-  width: 420px;
-  height: 420px;
-  border-radius: 999px;
-  filter: blur(10px);
+  inset: 0;
+  background-image: linear-gradient(rgba(140, 164, 255, .04) 1px, transparent 1px), linear-gradient(90deg, rgba(140, 164, 255, .04) 1px, transparent 1px);
+  background-size: 36px 36px;
   pointer-events: none;
   z-index: -1;
 }
 
-body::before {
-  top: -160px;
-  left: -90px;
-  background: radial-gradient(circle, rgba(123, 97, 255, .28) 0%, rgba(123, 97, 255, 0) 70%);
+.tbar {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
 }
 
-body::after {
-  right: -100px;
-  bottom: -180px;
-  background: radial-gradient(circle, rgba(84, 212, 255, .2) 0%, rgba(84, 212, 255, 0) 70%);
+.tbar-brand { display: flex; align-items: center; gap: 10px; min-width: max-content; }
+.tbar-chip {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #c7f4ff;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(132, 210, 255, .4);
+  background: linear-gradient(130deg, rgba(43, 82, 195, .42), rgba(26, 149, 179, .28));
 }
 
 .lcard,
 .cpanel,
-.canvas,
-.code,
+.cpanel-right,
+.canvas-wrap,
 .scard,
-.logs,
 .tcard,
 .tpl,
-.pg-scroll,
-.mcard,
 .sched-card,
+.mcard,
+.logbox,
 .ep-wrap,
-.page-head,
 .stat,
 .lib-item,
-.cmd-row,
-.logline {
+.cmd-card {
   border-color: var(--line) !important;
   box-shadow: var(--glow);
-  backdrop-filter: blur(14px);
-}
-
-.tbar {
-  background: linear-gradient(120deg, rgba(13, 22, 48, .95) 0%, rgba(19, 35, 78, .95) 50%, rgba(13, 22, 48, .95) 100%);
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, .3);
-}
-
-.tbar-logo {
-  letter-spacing: .02em;
-  text-shadow: 0 0 18px rgba(84, 212, 255, .35);
-}
-
-.tbtn,
-.sbtn,
-.cbtn,
-.xbtn,
-.lbtn,
-.ldiscord {
-  border: 1px solid var(--line2);
-  box-shadow: 0 10px 24px rgba(2, 8, 25, .3);
-}
-
-.tbtn,
-.sbtn,
-.cbtn,
-.lbtn,
-.ldiscord {
-  background: linear-gradient(135deg, rgba(57, 78, 168, .78), rgba(93, 79, 217, .78));
-  color: var(--t1);
-}
-
-.ttab,
-.snav-item {
-  border: 1px solid transparent;
-}
-
-.ttab.on,
-.snav-item.on {
-  background: linear-gradient(135deg, rgba(91, 119, 255, .24), rgba(84, 212, 255, .2));
-  border-color: var(--line2);
-}
-
-.finput,
-.fsel,
-.ftextarea,
-.lf-input {
-  background: rgba(11, 21, 52, .9);
-  border-color: rgba(124, 145, 230, .35);
-}
-
-.finput:focus,
-.fsel:focus,
-.ftextarea:focus,
-.lf-input:focus {
-  border-color: var(--acc2);
-  box-shadow: 0 0 0 3px rgba(84, 212, 255, .18);
-}
-
-.csec {
-  border-bottom: 1px solid rgba(138, 160, 255, .16);
-}
-
-.mcard,
-.tcard,
-.tpl,
-.sched-card,
-.lib-item,
-.cmd-row,
-.logline {
-  background: linear-gradient(145deg, rgba(21, 31, 70, .86), rgba(13, 21, 48, .95));
-}
-
-.ep-wrap,
-.preview-shell,
-.canvas {
-  background: linear-gradient(145deg, rgba(23, 35, 78, .86), rgba(12, 20, 45, .98));
-}
-
-.stat {
-  background: linear-gradient(145deg, rgba(26, 40, 88, .85), rgba(17, 26, 58, .96));
 }
 
 .pg-scroll {
-  border-radius: 18px;
-  margin-top: 14px;
-  margin-bottom: 14px;
-  border: 1px solid rgba(132, 152, 245, .22);
-  background: linear-gradient(180deg, rgba(10, 16, 39, .74) 0%, rgba(8, 13, 31, .84) 100%);
+  margin: 16px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(9, 15, 36, .88), rgba(8, 13, 30, .95));
+}
+
+.ttab { border-radius: 10px; }
+.ttab.on {
+  background: linear-gradient(135deg, rgba(84, 120, 255, .34), rgba(55, 214, 255, .22));
+  border-color: var(--line2);
+}
+
+.finput, .fsel, .ftextarea, .lf-input {
+  background: rgba(8, 17, 43, .96);
+  border: 1px solid rgba(127, 153, 240, .4);
+}
+
+.finput:focus, .fsel:focus, .ftextarea:focus, .lf-input:focus {
+  border-color: var(--acc2);
+  box-shadow: 0 0 0 4px rgba(55, 214, 255, .16);
+}
+
+.cbtn, .sbtn, .tbtn, .lbtn, .ldiscord {
+  border: 1px solid rgba(132, 210, 255, .45);
+  background: linear-gradient(135deg, rgba(52, 88, 209, .82), rgba(79, 60, 209, .86));
+}
+
+.snav-item {
+  border-left-width: 4px;
+  border-left-color: transparent;
+}
+
+.snav-item.on {
+  background: linear-gradient(90deg, rgba(83, 112, 255, .3), rgba(55, 214, 255, .08));
+  border-left-color: var(--acc2);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(84, 212, 255, .85), rgba(123, 97, 255, .9));
+  background: linear-gradient(180deg, rgba(55, 214, 255, .95), rgba(138, 123, 255, .92));
+}
+
+@media (min-width: 901px) {
+  .ham,
+  .tbar-tabs {
+    display: none;
+  }
+
+  .sidebar {
+    display: flex;
+    transform: none;
+    top: var(--tbar-h);
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(8, 14, 34, .96), rgba(9, 14, 33, .9));
+  }
+
+  .sidebar-overlay { display: none !important; }
+  .pages { margin-left: var(--sidebar-w); }
 }
 
 @media (max-width:600px) {
@@ -790,7 +766,10 @@ body::after {
     <button class="ham" id="ham" onclick="toggleSidebar()" aria-label="Menu">
       <span></span><span></span><span></span>
     </button>
-    <span class="tbar-logo">⚡ Studio</span>
+    <div class="tbar-brand">
+      <span class="tbar-logo">⚡ Studio</span>
+      <span class="tbar-chip">Revamped UI</span>
+    </div>
 
     <!-- Desktop tabs -->
     <nav class="tbar-tabs">
