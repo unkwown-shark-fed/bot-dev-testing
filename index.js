@@ -6,6 +6,7 @@ const logger = require('./logger');
 const config = require('./config.json');
 const db = require('./db');
 const { loadCommandModules } = require('./utils/command-loader');
+const { createInviteRoleStore } = require('./utils/invite-role-store');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -26,7 +27,7 @@ const client = new Client({
 client.config    = config;
 client.commands  = new Collection();
 client.cooldowns = new Collection();
-client.inviteRoleLinks = new Map();
+client.inviteRoleStore = createInviteRoleStore();
 client.inviteUsesCache = new Map();
 
 client.stats = {
@@ -166,26 +167,53 @@ async function refreshInviteCache(guild) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function detectUsedInvite(guild, previousUses, attempts = 4) {
+  let latest = null;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const invites = await guild.invites.fetch();
+    latest = new Map();
+    let usedCode = null;
+
+    for (const invite of invites.values()) {
+      const uses = invite.uses || 0;
+      latest.set(invite.code, uses);
+      const oldUses = previousUses.get(invite.code) || 0;
+      if (!usedCode && uses > oldUses) {
+        usedCode = invite.code;
+      }
+    }
+
+    client.inviteUsesCache.set(guild.id, latest);
+    if (usedCode) return usedCode;
+
+    await sleep(1200);
+  }
+
+  return null;
+}
+
 async function handleInviteRoleAssignment(member) {
-  if (!member?.guild || !client.inviteRoleLinks.size) return;
+  if (!member?.guild || client.inviteRoleStore.size() === 0) return;
 
   const guild = member.guild;
-  const previous = client.inviteUsesCache.get(guild.id) || new Map();
-  const current = await refreshInviteCache(guild);
-  if (!current) return;
+  const previous = new Map(client.inviteUsesCache.get(guild.id) || new Map());
 
   let usedCode = null;
-  for (const [code, uses] of current.entries()) {
-    const oldUses = previous.get(code) || 0;
-    if (uses > oldUses) {
-      usedCode = code;
-      break;
-    }
+  try {
+    usedCode = await detectUsedInvite(guild, previous);
+  } catch (err) {
+    logger.warn(`Failed invite detection for ${member.user.tag}: ${err.message}`);
+    return;
   }
 
   if (!usedCode) return;
 
-  const mapping = client.inviteRoleLinks.get(usedCode);
+  const mapping = client.inviteRoleStore.get(usedCode);
   if (!mapping || mapping.guildId !== guild.id || !Array.isArray(mapping.roleIds) || mapping.roleIds.length === 0) return;
 
   const roleIds = mapping.roleIds
@@ -194,7 +222,7 @@ async function handleInviteRoleAssignment(member) {
     .map(role => role.id);
 
   if (roleIds.length === 0) {
-    client.inviteRoleLinks.delete(usedCode);
+    client.inviteRoleStore.delete(usedCode);
     return;
   }
 
@@ -379,7 +407,7 @@ client.on('inviteDelete', invite => {
   const cache = client.inviteUsesCache.get(guildId);
   if (cache) cache.delete(invite.code);
 
-  client.inviteRoleLinks.delete(invite.code);
+  client.inviteRoleStore.delete(invite.code);
 });
 
 client.on('guildMemberAdd', member => {
