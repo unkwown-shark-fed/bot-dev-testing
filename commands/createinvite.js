@@ -11,7 +11,30 @@ const INVITABLE_CHANNEL_TYPES = new Set([
 
 function collectRequestedRoleIds(interaction) {
   const roleIds = new Set();
-  for (let i = 1; i <= 5; i++) {
+  const rolesOption = interaction.options.get('roles');
+  if (rolesOption) {
+    if (typeof rolesOption.value === 'string') {
+      const parsedRoleIds = rolesOption.value
+        .split(/[\s,]+/)
+        .map(token => token.trim())
+        .filter(Boolean)
+        .map(token => {
+          const mentionMatch = token.match(/^<@&(\d{16,20})>$/);
+          if (mentionMatch) return mentionMatch[1];
+          return /^\d{16,20}$/.test(token) ? token : null;
+        })
+        .filter(Boolean);
+
+      for (const roleId of parsedRoleIds) roleIds.add(roleId);
+    } else {
+      if (rolesOption.role?.id) roleIds.add(rolesOption.role.id);
+      else if (typeof rolesOption.value === 'string' && /^\d{16,20}$/.test(rolesOption.value)) {
+        roleIds.add(rolesOption.value);
+      }
+    }
+  }
+
+  for (let i = 2; i <= 5; i++) {
     const role = interaction.options.getRole(`role_${i}`);
     if (role) roleIds.add(role.id);
   }
@@ -49,7 +72,12 @@ module.exports = {
           .setDescription('Always create a new unique invite')
           .setRequired(false));
 
-      for (let i = 1; i <= 5; i++) {
+      builder.addRoleOption(option => option
+        .setName('roles')
+        .setDescription('Optional auto-role #1')
+        .setRequired(false));
+
+      for (let i = 2; i <= 5; i++) {
         builder.addRoleOption(option => option
           .setName(`role_${i}`)
           .setDescription(`Optional auto-role #${i}`)
