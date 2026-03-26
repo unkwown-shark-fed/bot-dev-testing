@@ -11,8 +11,28 @@ const INVITABLE_CHANNEL_TYPES = new Set([
 
 function collectRequestedRoleIds(interaction) {
   const roleIds = new Set();
-  const primaryRole = interaction.options.getRole('roles');
-  if (primaryRole) roleIds.add(primaryRole.id);
+  const rolesOption = interaction.options.get('roles');
+  if (rolesOption) {
+    if (typeof rolesOption.value === 'string') {
+      const parsedRoleIds = rolesOption.value
+        .split(/[\s,]+/)
+        .map(token => token.trim())
+        .filter(Boolean)
+        .map(token => {
+          const mentionMatch = token.match(/^<@&(\d{16,20})>$/);
+          if (mentionMatch) return mentionMatch[1];
+          return /^\d{16,20}$/.test(token) ? token : null;
+        })
+        .filter(Boolean);
+
+      for (const roleId of parsedRoleIds) roleIds.add(roleId);
+    } else {
+      if (rolesOption.role?.id) roleIds.add(rolesOption.role.id);
+      else if (typeof rolesOption.value === 'string' && /^\d{16,20}$/.test(rolesOption.value)) {
+        roleIds.add(rolesOption.value);
+      }
+    }
+  }
 
   for (let i = 2; i <= 5; i++) {
     const role = interaction.options.getRole(`role_${i}`);
