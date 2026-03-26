@@ -11,7 +11,10 @@ const INVITABLE_CHANNEL_TYPES = new Set([
 
 function collectRequestedRoleIds(interaction) {
   const roleIds = new Set();
-  for (let i = 1; i <= 5; i++) {
+  const primaryRole = interaction.options.getRole('roles');
+  if (primaryRole) roleIds.add(primaryRole.id);
+
+  for (let i = 2; i <= 5; i++) {
     const role = interaction.options.getRole(`role_${i}`);
     if (role) roleIds.add(role.id);
   }
@@ -49,7 +52,12 @@ module.exports = {
           .setDescription('Always create a new unique invite')
           .setRequired(false));
 
-      for (let i = 1; i <= 5; i++) {
+      builder.addRoleOption(option => option
+        .setName('roles')
+        .setDescription('Optional auto-role #1')
+        .setRequired(false));
+
+      for (let i = 2; i <= 5; i++) {
         builder.addRoleOption(option => option
           .setName(`role_${i}`)
           .setDescription(`Optional auto-role #${i}`)
