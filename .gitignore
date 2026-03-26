@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+logs/
+exports/
+.coverage/
+.nyc_output/
+.presence_update.json
+*.tmp
+*.swp
+.DS_Store
