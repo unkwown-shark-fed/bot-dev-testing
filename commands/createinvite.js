@@ -11,33 +11,15 @@ const INVITABLE_CHANNEL_TYPES = new Set([
 
 function collectRequestedRoleIds(interaction) {
   const roleIds = new Set();
-  const rolesOption = interaction.options.get('roles');
-  if (rolesOption) {
-    if (typeof rolesOption.value === 'string') {
-      const parsedRoleIds = rolesOption.value
-        .split(/[\s,]+/)
-        .map(token => token.trim())
-        .filter(Boolean)
-        .map(token => {
-          const mentionMatch = token.match(/^<@&(\d{16,20})>$/);
-          if (mentionMatch) return mentionMatch[1];
-          return /^\d{16,20}$/.test(token) ? token : null;
-        })
-        .filter(Boolean);
 
-      for (const roleId of parsedRoleIds) roleIds.add(roleId);
-    } else {
-      if (rolesOption.role?.id) roleIds.add(rolesOption.role.id);
-      else if (typeof rolesOption.value === 'string' && /^\d{16,20}$/.test(rolesOption.value)) {
-        roleIds.add(rolesOption.value);
-      }
-    }
-  }
+  const firstRole = interaction.options.getRole('roles');
+  if (firstRole) roleIds.add(firstRole.id);
 
   for (let i = 2; i <= 5; i++) {
     const role = interaction.options.getRole(`role_${i}`);
     if (role) roleIds.add(role.id);
   }
+
   return Array.from(roleIds);
 }
 
@@ -162,15 +144,24 @@ module.exports = {
       const expiresText = maxAge === 0
         ? 'Never'
         : `<t:${Math.floor((Date.now() + maxAge * 1000) / 1000)}:R>`;
+      const autoRolesText = requestedRoleIds.length
+        ? requestedRoleIds.map(id => `<@&${id}>`).join(', ')
+        : 'None';
+
+      const lines = [
+        `✅ Invite created for ${channel}: ${invite.url}`,
+        `• Max uses: **${maxUses === 0 ? 'Unlimited' : maxUses}**`,
+        `• Expires: **${expiresText}**`,
+        `• Temporary membership: **${temporary ? 'Yes' : 'No'}**`,
+        `• Auto roles (bot-assigned): **${autoRolesText}**`,
+      ];
+
+      if (requestedRoleIds.length > 0) {
+        lines.push('ℹ️ Discord does not expose API support to populate the native **Invites → Roles** column for bot-created links; roles are applied by the bot after a member joins with this invite.');
+      }
 
       return interaction.reply({
-        content: [
-          `✅ Invite created for ${channel}: ${invite.url}`,
-          `• Max uses: **${maxUses === 0 ? 'Unlimited' : maxUses}**`,
-          `• Expires: **${expiresText}**`,
-          `• Temporary membership: **${temporary ? 'Yes' : 'No'}**`,
-          `• Auto roles: **${requestedRoleIds.length ? requestedRoleIds.map(id => `<@&${id}>`).join(', ') : 'None'}**`,
-        ].join('\n'),
+        content: lines.join('\n'),
         ephemeral: false,
       });
     } catch (error) {
