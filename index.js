@@ -26,6 +26,8 @@ const client = new Client({
 client.config    = config;
 client.commands  = new Collection();
 client.cooldowns = new Collection();
+client.inviteRoleLinks = new Map();
+client.inviteUsesCache = new Map();
 
 client.stats = {
   commandsExecuted: 0,
@@ -148,6 +150,62 @@ const dbLoadPromise = (async () => {
   }
 })();
 
+
+async function refreshInviteCache(guild) {
+  try {
+    const invites = await guild.invites.fetch();
+    const usesByCode = new Map();
+    for (const invite of invites.values()) {
+      usesByCode.set(invite.code, invite.uses || 0);
+    }
+    client.inviteUsesCache.set(guild.id, usesByCode);
+    return usesByCode;
+  } catch (err) {
+    logger.warn(`Failed to fetch invites for ${guild.name} (${guild.id}): ${err.message}`);
+    return null;
+  }
+}
+
+async function handleInviteRoleAssignment(member) {
+  if (!member?.guild || !client.inviteRoleLinks.size) return;
+
+  const guild = member.guild;
+  const previous = client.inviteUsesCache.get(guild.id) || new Map();
+  const current = await refreshInviteCache(guild);
+  if (!current) return;
+
+  let usedCode = null;
+  for (const [code, uses] of current.entries()) {
+    const oldUses = previous.get(code) || 0;
+    if (uses > oldUses) {
+      usedCode = code;
+      break;
+    }
+  }
+
+  if (!usedCode) return;
+
+  const mapping = client.inviteRoleLinks.get(usedCode);
+  if (!mapping || mapping.guildId !== guild.id || !Array.isArray(mapping.roleIds) || mapping.roleIds.length === 0) return;
+
+  const roleIds = mapping.roleIds
+    .map(roleId => guild.roles.cache.get(roleId))
+    .filter(role => role && role.editable)
+    .map(role => role.id);
+
+  if (roleIds.length === 0) {
+    client.inviteRoleLinks.delete(usedCode);
+    return;
+  }
+
+  try {
+    await member.roles.add(roleIds, `Auto role assignment via invite ${usedCode}`);
+    logger.info(`🎟️ Assigned invite roles to ${member.user.tag}: ${roleIds.join(', ')}`);
+  } catch (err) {
+    logger.warn(`Failed invite role assignment for ${member.user.tag}: ${err.message}`);
+  }
+}
+
 // ── Ready ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   logger.info(`✅ Logged in as ${client.user.tag}`);
@@ -157,6 +215,8 @@ client.once('ready', async () => {
 
   const totalLoaded = client.commands.size;
   logger.info(`📊 Total commands ready: ${totalLoaded} — ${Array.from(client.commands.keys()).join(', ')}`);
+
+  await Promise.all(client.guilds.cache.map(guild => refreshInviteCache(guild)));
 
   // Apply saved presence from config.json on startup
   try {
@@ -302,9 +362,36 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+
+client.on('inviteCreate', invite => {
+  const guildId = invite.guild?.id;
+  if (!guildId) return;
+
+  const cache = client.inviteUsesCache.get(guildId) || new Map();
+  cache.set(invite.code, invite.uses || 0);
+  client.inviteUsesCache.set(guildId, cache);
+});
+
+client.on('inviteDelete', invite => {
+  const guildId = invite.guild?.id;
+  if (!guildId) return;
+
+  const cache = client.inviteUsesCache.get(guildId);
+  if (cache) cache.delete(invite.code);
+
+  client.inviteRoleLinks.delete(invite.code);
+});
+
+client.on('guildMemberAdd', member => {
+  handleInviteRoleAssignment(member).catch(err => {
+    logger.warn(`guildMemberAdd invite-role flow failed: ${err.message}`);
+  });
+});
+
 // ── Guild join/leave logging ──────────────────────────────────────────────────
 client.on('guildCreate', guild => {
   logger.info(`✨ Joined new guild: ${guild.name} (${guild.id}) - ${guild.memberCount} members`);
+  refreshInviteCache(guild).catch(() => {});
 });
 
 client.on('guildDelete', guild => {
