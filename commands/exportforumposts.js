@@ -109,7 +109,7 @@ module.exports = {
   cooldown: 20,
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ ephemeral: false });
 
     const forumChannel = interaction.options.getChannel('forum', true);
     const maxPosts = interaction.options.getInteger('max_posts', false) ?? 0;
