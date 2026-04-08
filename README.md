@@ -67,6 +67,7 @@ npm start
 | `/export` | Export channel messages to CSV | 30s |
 | `/exportmessages` | Export specific messages by link/ID to CSV | 10s |
 | `/exportinvites` | Export users who posted a keyword to CSV | 15s |
+| `/exportforumposts` | Export all messages from all forum posts to CSV | 20s |
 
 ### ⚙️ Moderation Commands
 | Command | Description | Cooldown |
