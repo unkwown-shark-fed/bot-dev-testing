@@ -58,9 +58,9 @@ module.exports = {
         if (msg.content) out += `\n${msg.content}`;
 
         if (msg.attachments && msg.attachments.size > 0) {
-          out += '\\n';
+          out += '\n';
           for (const att of msg.attachments.values()) {
-            out += `\\nAttachments: 📎 [${att.name || 'file'}](${att.url})`;
+            out += `\nAttachments: 📎 [${att.name || 'file'}](${att.url})`;
           }
         }
         const attachmentUrls = msg.attachments && msg.attachments.size > 0
@@ -76,7 +76,7 @@ module.exports = {
           msg.content || '',
           attachmentUrls
         ]);
-        out += `\\n\\n Original: <#${msg.channelId}> 🌊`;
+        out += `\n\n Original: <#${msg.channelId}> 🌊`;
 
         if (first) { await interaction.editReply(out); first = false; }
         else await interaction.followUp({ content: out, ephemeral: false });
