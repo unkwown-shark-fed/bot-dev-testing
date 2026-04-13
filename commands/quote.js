@@ -2,6 +2,14 @@
 const { createCommandBuilder } = require('../utils/builders');
 const { AttachmentBuilder } = require('discord.js');
 
+function unescapeVisibleNewlines(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n');
+}
+
 module.exports = {
   data: createCommandBuilder({
     name: 'quote',
@@ -54,8 +62,10 @@ module.exports = {
           hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
         });
 
+        const displayContent = unescapeVisibleNewlines(msg.content || '');
+
         let out = `**${tag}** — ${dateStr}`;
-        if (msg.content) out += `\n${msg.content}`;
+        if (displayContent) out += `\n${displayContent}`;
 
         if (msg.attachments && msg.attachments.size > 0) {
           out += '\n';
@@ -73,7 +83,7 @@ module.exports = {
           dateStr,
           msg.channelId,
           msg.id,
-          msg.content || '',
+          displayContent,
           attachmentUrls
         ]);
         out += `\n\n Original: <#${msg.channelId}> 🌊`;
@@ -92,11 +102,19 @@ module.exports = {
     if (rows.length > 1) {
       const csv = rows.map(cols => cols.map(csvEscape).join(',')).join('\n');
       const file = new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: `quote-${Date.now()}.csv` });
-      await interaction.followUp({
-        content: '📄 CSV export of quote results:',
-        files: [file],
-        ephemeral: false
-      });
+      try {
+        await interaction.user.send({
+          content: '📄 CSV export of quote results:',
+          files: [file],
+        });
+        await interaction.followUp({ content: '✅ Sent CSV export to your DMs.', ephemeral: true });
+      } catch (_) {
+        await interaction.followUp({
+          content: '📄 CSV export of quote results:',
+          files: [file],
+          ephemeral: false
+        });
+      }
     }
   },
 };
