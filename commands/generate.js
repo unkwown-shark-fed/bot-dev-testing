@@ -11,13 +11,13 @@ const { createCommandBuilder } = require('../utils/builders');
 const RULES_URL = 'https://discord.com/channels/410479299347480576/926499735248973874/1456345177164742656';
 
 const MATCH_DATES = [
-  '11 April 2026',
-  '12 April 2026',
-  '25 April 2026',
-  '26 April 2026'
+  '11 July 2026',
+  '12 July 2026',
+  '25 July 2026',
+  '26 July 2026'
 ];
 
-const ALL_MAPS = ['Erangel', 'Sanhok', 'Miramar', 'Vikendi', 'Rondo'];
+const ALL_MAPS = ['Erangel: Theme Mode', 'Sanhok', 'Miramar', 'Vikendi', 'Rondo', 'Karakin'];
 const MODES = ['Solo', 'Duo', 'Squad'];
 
 const MATCH_TIMES = {
@@ -96,7 +96,7 @@ function buildComponents(buttonRows, roleId, extraText) {
 
   // Everything lives inside one top-level Container
   const containerChildren = [
-    textDisplay('## 📢 **Community Custom Matches: April schedule**'),
+    textDisplay('## 📢 **Community Custom Matches: July schedule**'),
     textDisplay(`<@&${roleId}>`),
     ...(trimmedExtraText ? [separator(), textDisplay(trimmedExtraText)] : []),
     separator(),

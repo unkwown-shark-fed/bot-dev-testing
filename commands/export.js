@@ -24,7 +24,7 @@ function escapeCsv(value) {
 }
 
 function extractFirstGameUid(msg) {
-  const regex = /\b\d{10,11}\b/g;
+  const regex = /\b\d{9,13}\b/g;
   const pieces = [];
 
   if (msg.content) pieces.push(msg.content);
