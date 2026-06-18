@@ -1,10 +1,12 @@
 const { Client, GatewayIntentBits, Partials, Collection, PermissionFlagsBits } = require('discord.js');
 require('dotenv').config();
 const path = require('path');
-const fs = require('fs');
 const logger = require('./logger');
 const config = require('./config.json');
 const db = require('./db');
+const { createDashboardLogger } = require('./bot/dashboard-log');
+const { applyPresence, watchPresenceUpdates } = require('./bot/presence');
+const { loadModuleFromString } = require('./dashboard/services/code-loader');
 const { loadCommandModules } = require('./utils/command-loader');
 
 const token = process.env.DISCORD_TOKEN;
@@ -39,41 +41,12 @@ client.stats = {
 // log channel as a Discord embed. Non-fatal — never crashes the bot.
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:3000';
 const DASHBOARD_PASS = process.env.DASHBOARD_PASSWORD || '';
-const ACTIVITY_TYPES = { Playing: 0, Streaming: 1, Listening: 2, Watching: 3, Competing: 5 };
 const PRESENCE_UPDATE_FILE = path.join(__dirname, '.presence_update.json');
-
-function buildPresence({ status, acttype, acttext }) {
-  return {
-    status: status || 'online',
-    activities: acttext ? [{ name: acttext, type: ACTIVITY_TYPES[acttype] ?? 2 }] : [],
-  };
-}
-
-function applyPresence(clientInstance, settings) {
-  clientInstance.user.setPresence(buildPresence(settings));
-}
-
-async function logCommandUse({ command, user, guild, channel, args = '', error = null }) {
-  if (!DASHBOARD_PASS) return;
-
-  try {
-    const response = await fetch(`${DASHBOARD_URL}/api/log`, {
-      method:  'POST',
-      signal: AbortSignal.timeout(3000),
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${DASHBOARD_PASS}`,
-      },
-      body: JSON.stringify({ command, user, guild, channel, args, error }),
-    });
-
-    if (!response.ok) {
-      logger.warn(`Dashboard log request failed with status ${response.status}`);
-    }
-  } catch (err) {
-    logger.warn(`Dashboard log request failed: ${err.message}`);
-  }
-}
+const logCommandUse = createDashboardLogger({
+  dashboardUrl: DASHBOARD_URL,
+  dashboardPassword: DASHBOARD_PASS,
+  logger,
+});
 
 // ── Command source mode ────────────────────────────────────────────────────────
 const commandsPath = path.join(__dirname, 'commands');
@@ -118,12 +91,10 @@ const dbLoadPromise = (async () => {
       if (record.source !== 'dashboard' || !record.code) continue;
 
       try {
-        const Module = require('module');
-        const m = new Module('');
-        m.filename = path.join(commandsPath, `${record.name}.js`);
-        m.paths = Module._nodeModulePaths(commandsPath);
-        m._compile(record.code, `${record.name}.js`);
-        const cmd = m.exports;
+        const cmd = loadModuleFromString(record.code, {
+          commandDir: commandsPath,
+          filename: `${record.name}.js`,
+        });
 
         if (cmd?.data?.name && typeof cmd.execute === 'function') {
           if (client.commands.has(cmd.data.name)) {
@@ -173,21 +144,11 @@ client.once('ready', async () => {
   // When you save Presence settings in the dashboard, it writes a
   // .presence_update.json file. This watcher picks it up and applies it live
   // without needing a bot restart.
-  setInterval(() => {
-    try {
-      if (!fs.existsSync(PRESENCE_UPDATE_FILE)) return;
-
-      const { status, acttype, acttext, ts } = JSON.parse(fs.readFileSync(PRESENCE_UPDATE_FILE, 'utf8'));
-      // Only apply if written within the last 60 seconds
-      if (typeof ts !== 'number' || Date.now() - ts > 60_000) return;
-
-      applyPresence(client, { status, acttype, acttext });
-      logger.info(`[presence] Updated: ${status} / ${acttype} ${acttext}`);
-      fs.unlinkSync(PRESENCE_UPDATE_FILE); // delete after applying so it doesn't re-trigger
-    } catch (e) {
-      logger.warn(`[presence] Failed to apply update: ${e.message}`);
-    }
-  }, 15_000); // checks every 15 seconds
+  watchPresenceUpdates({
+    client,
+    filePath: PRESENCE_UPDATE_FILE,
+    logger,
+  }); // checks every 15 seconds
 });
 
 // ── Interaction handler ───────────────────────────────────────────────────────
@@ -199,7 +160,8 @@ client.on('interactionCreate', async interaction => {
   }
 
   // Guild restriction
-  if (Array.isArray(config.allowedGuilds) && config.allowedGuilds.length > 0 && !config.allowedGuilds.includes(interaction.guildId)) {
+  const hasGuildRestrictions = Array.isArray(config.allowedGuilds) && config.allowedGuilds.length > 0;
+  if (hasGuildRestrictions && !config.allowedGuilds.includes(interaction.guildId)) {
     return interaction.reply({ content: '⛔ This bot is restricted to specific guilds.', ephemeral: true });
   }
 
