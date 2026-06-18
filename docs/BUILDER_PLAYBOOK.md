@@ -1,10 +1,26 @@
-# Builder Playbook (Newbie-Friendly)
+# Builder Playbook
 
-This guide explains **what to configure** and **what happens** for command building, embeds, buttons, modals, and responses.
+This playbook documents the builder helpers that currently exist in `utils/builders.js` and shows how to
+combine them with native Discord.js v14 builders when you need components that are not wrapped by the helper
+module.
 
-## 1) Command Builder (`createCommandBuilder`)
+_Last documentation refresh: 2026-06-09._
+
+## Current helper exports
+
+`utils/builders.js` exports exactly three items:
+
+- `createCommandBuilder`
+- `createEmbed`
+- `EMBED_COLORS`
+
+If you need buttons, modals, select menus, action rows, attachments, or advanced embed properties, import
+those classes directly from `discord.js`.
+
+## 1. Slash commands with `createCommandBuilder`
 
 ```js
+const { PermissionFlagsBits } = require('discord.js');
 const { createCommandBuilder } = require('../utils/builders');
 
 module.exports = {
@@ -13,248 +29,247 @@ module.exports = {
     description: 'Example command',
     defaultMemberPermissions: PermissionFlagsBits.ManageMessages,
     dmPermission: false,
-    nsfw: false,
-    configure: builder => builder
-      .addStringOption(o => o.setName('text').setDescription('Any text').setRequired(true))
+    configure: builder => builder.addStringOption(option =>
+      option
+        .setName('text')
+        .setDescription('Text to echo')
+        .setRequired(true)
+    ),
   }),
-  async execute(interaction) {}
+
+  async execute(interaction) {
+    const text = interaction.options.getString('text', true);
+    await interaction.reply({ content: text, ephemeral: true });
+  },
 };
 ```
 
-### If you set this → this happens
+### What each setting does
 
-- `name: 'ping'`
-  - Slash command appears as `/ping`.
-- `description: '...'`
-  - Shown under the command in Discord UI.
-- `defaultMemberPermissions: PermissionFlagsBits.X`
-  - Discord only shows/allows command to members with those permissions by default.
-- `dmPermission: false`
-  - Command is disabled in DMs (guild-only behavior from Discord side).
-- `nsfw: true`
-  - Command is restricted to NSFW channels.
-- `configure: builder => ...`
-  - Add options, subcommands, choices, autocomplete flags, etc.
+| Setting | Effect |
+| --- | --- |
+| `name` | Required. Creates the slash command name, for example `/example`. |
+| `description` | Required. Shows command help text in Discord. |
+| `defaultMemberPermissions` | Optional Discord permission bitfield that controls default command visibility/access. |
+| `dmPermission` | Optional boolean. `false` makes the command guild-only. |
+| `configure` | Optional callback for options, subcommands, choices, and autocomplete. |
 
-### Common option patterns
+### Supported option patterns
 
-- String option: `.addStringOption(...)`
-- Integer option: `.addIntegerOption(...)`
-- Boolean option: `.addBooleanOption(...)`
-- User option: `.addUserOption(...)`
-- Channel option: `.addChannelOption(...)`
-- Role option: `.addRoleOption(...)`
-- Mentionable: `.addMentionableOption(...)`
-- Attachment option: `.addAttachmentOption(...)`
-- Subcommand: `.addSubcommand(...)`
-- Subcommand group: `.addSubcommandGroup(...)`
+Because `configure` receives a native Discord.js builder, you can use the normal Discord.js v14 API:
 
-> The helper does not limit native discord.js builder APIs. You still use all normal option/subcommand methods inside `configure(...)`.
+```js
+configure: builder => builder
+  .addStringOption(option => option.setName('name').setDescription('Text'))
+  .addIntegerOption(option => option.setName('amount').setDescription('Number'))
+  .addBooleanOption(option => option.setName('enabled').setDescription('Toggle'))
+  .addUserOption(option => option.setName('user').setDescription('Member'))
+  .addChannelOption(option => option.setName('channel').setDescription('Channel'))
+  .addRoleOption(option => option.setName('role').setDescription('Role'))
+  .addMentionableOption(option => option.setName('target').setDescription('Mentionable'))
+  .addAttachmentOption(option => option.setName('file').setDescription('Upload'))
+```
 
----
+Subcommands are also native Discord.js builder calls:
 
-## 2) Embed Builder (`createEmbed`)
+```js
+configure: builder => builder
+  .addSubcommand(subcommand => subcommand
+    .setName('add')
+    .setDescription('Add a role')
+    .addRoleOption(option => option.setName('role').setDescription('Role').setRequired(true)))
+  .addSubcommand(subcommand => subcommand
+    .setName('remove')
+    .setDescription('Remove a role')
+    .addRoleOption(option => option.setName('role').setDescription('Role').setRequired(true)))
+```
+
+## 2. Embeds with `createEmbed`
 
 ```js
 const { createEmbed, EMBED_COLORS } = require('../utils/builders');
 
 const embed = createEmbed({
-  title: 'Status',
-  color: EMBED_COLORS.info,
-  description: 'Main description',
-  lines: ['Line A', 'Line B'],
-  bulletLines: true,
-  footer: 'Generated by bot',
-  timestamp: true,
+  title: 'Bot Status',
+  description: 'Everything is online.',
+  color: EMBED_COLORS.success,
+  footer: 'Generated by Discord Utility Bot',
+  thumbnail: 'https://example.com/icon.png',
+  image: 'https://example.com/banner.png',
 });
 ```
 
-### Newline feature
+### Supported embed options
 
-Use `lines: [...]` to build multi-line content cleanly.
+| Option | Effect |
+| --- | --- |
+| `title` | Sets the embed title. |
+| `description` | Sets the main embed body. |
+| `color` | Sets the embed color. Defaults to `EMBED_COLORS.primary`. |
+| `timestamp` | Adds the current timestamp by default. Set `false` to omit it. |
+| `footer` | Accepts a string or Discord.js footer object. |
+| `thumbnail` | Sets a thumbnail URL. |
+| `image` | Sets a large image URL. |
 
-- `lines: ['A', 'B']` → description includes:
-  - `A`
-  - `B`
-- `bulletLines: true` → description includes:
-  - `• A`
-  - `• B`
+### Available colors
 
-### If you set this → this happens
+| Name | Hex |
+| --- | --- |
+| `EMBED_COLORS.primary` | `#5865F2` |
+| `EMBED_COLORS.success` | `#57F287` |
+| `EMBED_COLORS.warning` | `#FEE75C` |
+| `EMBED_COLORS.danger` | `#ED4245` |
+| `EMBED_COLORS.info` | `#00AE86` |
 
-- `title`
-  - Large embed title text.
-- `description`
-  - Main body text.
-- `prependDescription` / `appendDescription`
-  - Extra text added before/after description/lines.
-- `url`
-  - Title becomes clickable.
-- `author`
-  - Shows author area at top (`string` or object).
-- `fields`
-  - Adds embed fields in one call.
-- `thumbnail` / `image`
-  - Sets thumbnail or full image.
-- `footer`
-  - Footer text (string or object).
-- `timestamp: true`
-  - Adds current timestamp.
+### Adding fields or advanced embed metadata
 
----
-
-## 3) Buttons
+`createEmbed` intentionally keeps a small API. Chain native Discord.js methods when you need more:
 
 ```js
-const { createButton, createActionRow } = require('../utils/builders');
-
-const approveBtn = createButton({
-  customId: 'approve_ticket',
-  label: 'Approve',
-  style: 'Success',
-});
-
-const docsBtn = createButton({
-  label: 'Open Docs',
-  style: 'Link',
-  url: 'https://discord.js.org/',
-});
-
-const row = createActionRow([approveBtn, docsBtn]);
+const embed = createEmbed({
+  title: 'Export Complete',
+  description: 'Your CSV file is ready.',
+  color: EMBED_COLORS.info,
+})
+  .addFields(
+    { name: 'Rows', value: '240', inline: true },
+    { name: 'Format', value: 'CSV', inline: true }
+  )
+  .setURL('https://discord.js.org/')
+  .setAuthor({ name: 'Export System' });
 ```
 
-### Rules
+## 3. Buttons and action rows
+
+The local helper module does **not** export button helpers. Use Discord.js directly:
+
+```js
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require('discord.js');
+
+const row = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId('approve_ticket')
+    .setLabel('Approve')
+    .setStyle(ButtonStyle.Success),
+  new ButtonBuilder()
+    .setLabel('Open Docs')
+    .setStyle(ButtonStyle.Link)
+    .setURL('https://discord.js.org/')
+);
+
+await interaction.reply({ content: 'Choose an action:', components: [row] });
+```
+
+Rules to remember:
 
 - Non-link buttons require `customId`.
-- Link buttons require `url`.
-- Optional `emoji` and `disabled` supported.
+- Link buttons require `url` and do not send component interactions back to the bot.
+- A message can have up to 5 action rows and each row can contain up to 5 buttons.
 
----
+## 4. Select menus
 
-## 4) Modals (form popups)
+Use Discord.js select menu builders directly:
 
 ```js
-const { createTextInput, createActionRow, createModal } = require('../utils/builders');
+const {
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+} = require('discord.js');
 
-const reasonInput = createTextInput({
-  customId: 'reason',
-  label: 'Reason',
-  style: 'Paragraph',
-  required: true,
-  minLength: 5,
-  maxLength: 500,
-});
+const menu = new StringSelectMenuBuilder()
+  .setCustomId('priority')
+  .setPlaceholder('Choose a priority')
+  .addOptions(
+    { label: 'Low', value: 'low' },
+    { label: 'Medium', value: 'medium' },
+    { label: 'High', value: 'high' }
+  );
 
-const modal = createModal({
-  customId: 'ban_modal',
-  title: 'Ban Request',
-  components: [createActionRow([reasonInput])],
-});
+const row = new ActionRowBuilder().addComponents(menu);
+await interaction.reply({ content: 'Select a priority:', components: [row], ephemeral: true });
+```
+
+Discord.js also provides channel, role, user, and mentionable select menu builders.
+
+## 5. Modals
+
+Use Discord.js modal and text input builders directly:
+
+```js
+const {
+  ActionRowBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} = require('discord.js');
+
+const modal = new ModalBuilder()
+  .setCustomId('feedback_modal')
+  .setTitle('Send Feedback')
+  .addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('feedback')
+        .setLabel('Feedback')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+    )
+  );
 
 await interaction.showModal(modal);
 ```
 
-### Rules
+Rules to remember:
 
-- Modal must have `customId` and `title`.
-- Text inputs need `customId` + `label`.
-- Put each text input inside an action row.
+- Modals need a `customId` and title.
+- Each text input must be inside an action row.
+- Handle modal submits in the bot's `interactionCreate` event if you add custom modal flows.
 
----
+## 6. Response visibility
 
-## 5) Select Menus
+| Method | What happens |
+| --- | --- |
+| `interaction.reply(payload)` | Sends the first slash-command response. Public unless `payload.ephemeral` is `true`. |
+| `interaction.deferReply({ ephemeral })` | Acknowledges the command while work continues. |
+| `interaction.editReply(payload)` | Edits the original reply or deferred reply. |
+| `interaction.followUp(payload)` | Sends another response after the first reply/defer. Can be public or ephemeral. |
+| `interaction.channel.send(payload)` | Sends a normal public channel message. |
+| `interaction.user.send(payload)` | Sends a DM to the user if their DMs allow it. |
 
-```js
-const { createSelectMenu, createActionRow } = require('../utils/builders');
+## 7. File command checklist
 
-const menu = createSelectMenu({
-  type: 'string',
-  customId: 'priority',
-  placeholder: 'Choose one',
-  options: [
-    { label: 'Low', value: 'low' },
-    { label: 'Medium', value: 'medium' },
-    { label: 'High', value: 'high' },
-  ],
-});
-
-const row = createActionRow([menu]);
-```
-
-`type` can be: `string`, `channel`, `role`, `user`, `mentionable`.
-
----
-
-## 6) Response behavior: “where will message go?”
-
-### `interaction.reply({ ... })`
-- First response to a slash command.
-- Goes in current channel unless `ephemeral: true`.
-
-### `ephemeral: true`
-- Only the command user can see it.
-- Does **not** appear publicly in channel.
-
-### `interaction.deferReply({ ephemeral })`
-- Acknowledges command quickly (“thinking…”).
-- Later, use `interaction.editReply(...)`.
-- Final visibility still follows ephemeral value used during defer/reply.
-
-### `interaction.followUp({ ... })`
-- Additional messages after first response.
-- Can be ephemeral or public depending on payload.
-
-### `interaction.channel.send(...)`
-- Normal channel message (public), independent of slash response flow.
-
-### `interaction.user.send(...)`
-- Direct message to user DM.
-
----
-
-## 7) Payload helper (`buildResponsePayload`)
-
-Use to build consistent payload objects:
+Every file command should export:
 
 ```js
-const { buildResponsePayload } = require('../utils/builders');
-
-const payload = buildResponsePayload({
-  content: 'Done',
-  embeds: [embed],
-  components: [row],
-  ephemeral: true,
-});
-
-await interaction.reply(payload);
+module.exports = {
+  data: createCommandBuilder({
+    name: 'mycommand',
+    description: 'Describe the command',
+  }),
+  async execute(interaction) {
+    await interaction.reply({ content: 'Done', ephemeral: true });
+  },
+};
 ```
 
----
+Before deploying, run:
 
-## 8) Practical flow examples
+```bash
+npm run quality:check
+npm run deploy
+```
 
-### A) “If button clicked, reply privately”
-1. Send message with button.
-2. On button interaction (`interaction.isButton()`), call `interaction.reply({ ephemeral: true })`.
-3. Only clicker sees response.
+## 8. Dashboard command notes
 
-### B) “If modal submitted, post result in channel”
-1. `showModal(modal)` on button click.
-2. Handle modal submit (`interaction.isModalSubmit()`).
-3. Use `interaction.reply({ ephemeral: false })` or `interaction.channel.send(...)`.
+Dashboard-generated or uploaded commands are stored in MongoDB with `source: "dashboard"` and their
+JavaScript source in the `code` field. At runtime:
 
-### C) “If command takes long time”
-1. `deferReply()`.
-2. Run long task.
-3. `editReply('Completed...')`.
-4. Optional `followUp(...)` for attachments/results.
-
----
-
-## 9) Tips for beginners
-
-- Start every command with small `data` + one option.
-- Add `deferReply()` whenever API/file work may exceed 3 seconds.
-- Use ephemeral for admin/debug outputs.
-- Use channel message for announcements.
-- Prefer `createEmbed({ lines: [...] })` for readable multi-line content.
+- file commands load first unless `DB_ONLY_COMMANDS=true`;
+- dashboard commands load from MongoDB after the DB connection succeeds;
+- a dashboard command with the same name overrides a file command in memory;
+- `npm run deploy` uses file commands first, falls back to MongoDB when no file commands exist, and
+  uses MongoDB directly when `DB_ONLY_COMMANDS=true`.

@@ -302,6 +302,20 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// ── Button & Modal handler (createpost bulk sessions) ────────────────────────
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+
+  const cmd = client.commands.get('createpost');
+  if (cmd?.handleComponent) {
+    try {
+      await cmd.handleComponent(interaction, client, logger);
+    } catch (err) {
+      logger.error(`createpost handleComponent error: ${err.message}`);
+    }
+  }
+});
+
 // ── Guild join/leave logging ──────────────────────────────────────────────────
 client.on('guildCreate', guild => {
   logger.info(`✨ Joined new guild: ${guild.name} (${guild.id}) - ${guild.memberCount} members`);
