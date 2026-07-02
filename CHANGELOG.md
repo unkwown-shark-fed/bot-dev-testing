@@ -1,30 +1,57 @@
 # Changelog
 
-All notable project changes should be recorded here.
+All notable changes to this project will be documented in this file.
 
-## Unreleased
-
-### Documentation
-
-- Refreshed all Markdown documentation for the current Discord.js v14 bot, dashboard, MongoDB command
-  mode, command inventory, and NPM scripts.
-- Corrected the builder playbook so it only lists helper APIs that currently exist in `utils/builders.js`.
-- Added direct guidance for using native Discord.js builders for buttons, action rows, select menus, and modals.
-- Updated the architecture notes with the current command-loading behavior, DB-only mode, dashboard API
-  groups, and maintenance risks.
-
-## 2.0.0
+## [2.0.0] - 2026-02-18
 
 ### Added
+- **NEW COMMANDS**
+  - `/help` - Comprehensive help system with categorized commands
+  - `/userinfo` - Detailed user information with roles, permissions, and timestamps
+  - `/cleanup` - Bulk message deletion with user/bot filters
 
-- Discord.js v14 slash-command utility bot with file-based command modules.
-- Dashboard command storage backed by MongoDB.
-- Optional DB-only command mode using `DB_ONLY_COMMANDS=true`.
-- Optional dashboard command file mirroring with `WRITE_COMMAND_FILES=true`.
-- Premium dashboard server with bot process controls, logs, settings, command upload, flow generation,
-  sync, and embed sending.
-- Export commands for channel messages, selected messages, invite keyword posters, forum posts, and reaction counts.
-- Moderation and operations commands including cleanup, repost, role management, member/user/server info,
-  quotes, schedules, and BGMI match generation.
-- Shared command loader and small builder helper module.
-- Basic quality check/fix scripts for JavaScript, JSON, and Markdown files.
+- **ENHANCED FEATURES**
+  - Cooldown system to prevent command spam
+  - Command usage statistics tracking
+  - Enhanced `/status` with detailed metrics and top command usage
+  - Dynamic bot status showing command count
+  - Log rotation (5MB max per file, 5 backup files)
+  - Colored console output for better readability
+  - Separate error log file
+  - Graceful shutdown handling (SIGINT)
+  - Guild join/leave logging
+
+- **IMPROVED ERROR HANDLING**
+  - Better error messages with emojis
+  - Fallback mechanisms for file delivery
+  - Rate limit protection in cleanup
+  - Enhanced permission checking
+
+- **DOCUMENTATION**
+  - Comprehensive README with all features
+  - Detailed .env.example with comments
+  - NPM scripts for common tasks
+  - Troubleshooting guide
+
+### Changed
+- Enhanced `/ping` with visual latency indicators
+- Improved `/serverinfo` with more details (boost status, channel types, member breakdown)
+- Better `/status` output with uptime formatting and health indicators
+- Updated deploy-commands.js with better error messages
+- Enhanced logger with file rotation and separate error logs
+
+### Fixed
+- Proper cooldown enforcement
+- Memory leak prevention in long-running operations
+- Better handling of missing permissions
+
+## [1.0.0] - 2026-02-17
+
+### Added
+- Initial release
+- Basic commands: ping, serverinfo, export, exportmessages, exportinvites
+- Moderation: rolemanage, repost
+- Search: findids, listusers
+- Gaming: schedule, generate
+- Basic logging with Winston
+- Environment-based configuration

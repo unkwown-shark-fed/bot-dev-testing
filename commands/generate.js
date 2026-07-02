@@ -17,7 +17,7 @@ const MATCH_DATES = [
   '26 July 2026'
 ];
 
-const ALL_MAPS = ['Erangel: Theme Mode', 'Sanhok', 'Miramar', 'Vikendi', 'Rondo', 'Karakin'];
+const ALL_MAPS = ['Erangel: Theme Mode', 'Sanhok', 'Miramar', 'Vikendi'];
 const MODES = ['Solo', 'Duo', 'Squad'];
 
 const MATCH_TIMES = {

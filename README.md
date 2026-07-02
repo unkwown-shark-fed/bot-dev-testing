@@ -1,231 +1,295 @@
-# Discord Utility Bot
+# 🤖 Discord Utility Bot v2.0 - Enhanced Edition
 
-A Discord.js v14 utility bot for community operations, moderation, exports, event scheduling,
-forum workflows, and dashboard-managed slash commands.
+A powerful, feature-rich Discord bot with export capabilities, moderation tools, and user management.
 
-_Last documentation refresh: 2026-06-09._
+## ✨ What's New in v2.0
 
-## What this repository includes
+### 🎯 Core Improvements
+- **Enhanced Error Handling** - Better error messages and graceful failure recovery
+- **Cooldown System** - Prevents command spam with per-user cooldowns
+- **Command Statistics** - Track usage, errors, and performance metrics
+- **Dynamic Bot Status** - Shows command count and responds to activity
+- **Log Rotation** - Automatic log file rotation to prevent disk space issues
+- **Colored Console Output** - Easy-to-read console logs with color coding
 
-- **Slash commands from files or MongoDB**: run the bundled commands in `commands/`, upload
-  dashboard commands to MongoDB, or enable DB-only mode.
-- **Premium web dashboard**: start, stop, restart, view logs, edit settings, build flows, deploy
-  dashboard commands, sync file commands, and send rich embeds.
-- **CSV export tooling**: export channel messages, selected messages, forum post content, invite
-  keyword posters, and reaction counts.
-- **Moderation and utility commands**: cleanup, repost, role management, user/server info, status,
-  member trends, invites, quotes, schedules, and BGMI match announcements.
-- **Operational logging**: Winston logs, dashboard log forwarding, command usage/error counters,
-  cooldowns, and owner/admin status checks.
+### 🆕 New Commands
+- **`/help`** - Comprehensive command help with categories
+- **`/userinfo`** - Detailed user information with roles, permissions, and join dates
+- **`/cleanup`** - Bulk delete messages with user and bot filters
 
-## Requirements
+### 📊 Enhanced Commands
+- **`/status`** - Now shows detailed statistics:
+  - Command usage statistics
+  - Memory usage and health indicators
+  - Uptime tracking
+  - Top 5 most-used commands
+  - Error rates and performance metrics
+- **`/ping`** - Visual latency indicators with emojis
+- **`/serverinfo`** - More detailed server information including boost status
 
-- Node.js **18 or newer**
-- A Discord application and bot token
-- Guild IDs where slash commands should be registered
-- MongoDB URI when using the dashboard command database or dashboard sync features
+---
 
-## Quick start
+## 🚀 Quick Setup
 
 ```bash
+# 1. Copy .env.example to .env
 cp .env.example .env
+
+# 2. Edit .env and fill in your credentials
+# Required: DISCORD_TOKEN, CLIENT_ID, GUILD_IDS
+
+# 3. Install dependencies
 npm install
+
+# 4. Register slash commands
 npm run deploy
+
+# 5. Start the bot
 npm start
 ```
 
-Before running `npm run deploy`, fill in at least:
+---
 
-```env
-DISCORD_TOKEN=your_bot_token_here
-CLIENT_ID=your_application_client_id
-GUILD_IDS=123456789012345678
-```
+## 📋 Complete Command List
 
-## Environment variables
+### 📊 Utility Commands
+| Command | Description | Cooldown |
+|---------|-------------|----------|
+| `/ping` | Check bot latency and API ping | 3s |
+| `/help` | Show all available commands | 5s |
+| `/serverinfo` | Display detailed server information | 5s |
+| `/userinfo [user]` | Display detailed user information | 5s |
+| `/status` | Bot health and statistics (admin only) | 3s |
 
-### Required for the bot and deploy script
+### 📤 Export Commands
+| Command | Description | Cooldown |
+|---------|-------------|----------|
+| `/export` | Export channel messages to CSV | 30s |
+| `/exportmessages` | Export specific messages by link/ID to CSV | 10s |
+| `/exportinvites` | Export users who posted a keyword to CSV | 15s |
 
+### ⚙️ Moderation Commands
+| Command | Description | Cooldown |
+|---------|-------------|----------|
+| `/cleanup` | Bulk delete messages (1-100) with filters | 10s |
+| `/repost` | Repost messages from one channel to another | 10s |
+| `/rolemanage add/remove` | Bulk add/remove roles from users | 15s |
+
+### 🔍 Search Commands
+| Command | Description | Cooldown |
+|---------|-------------|----------|
+| `/findids` | Find user IDs by searching usernames | 10s |
+| `/listusers` | Paginated list of members with a role | N/A |
+| `/reactafter` | React to messages after a starting message link | 10s |
+
+### 🎮 Gaming Commands
+| Command | Description | Cooldown |
+|---------|-------------|----------|
+| `/schedule` | Generate randomized match schedule | 3s |
+| `/generate` | Post Community Custom Matches schedule | 10s |
+
+---
+
+## ⚙️ Environment Variables
+
+### Required
 | Variable | Description |
-| --- | --- |
-| `DISCORD_TOKEN` | Discord bot token from the Discord Developer Portal. |
-| `CLIENT_ID` | Discord application/client ID. |
-| `GUILD_IDS` | Comma-separated guild IDs where guild slash commands are registered. |
+|----------|-------------|
+| `DISCORD_TOKEN` | Bot token from Discord Developer Portal |
+| `CLIENT_ID` | Application client ID |
+| `GUILD_IDS` | Comma-separated guild IDs for command registration |
 
-### Authorization and access control
-
+### Optional - Authorization
 | Variable | Description | Default |
-| --- | --- | --- |
-| `COMMAND_ROLE_ID` | Role required to use commands that check the configured command role. | Empty |
-| `BOT_OWNER_ID` | Owner user ID for owner-only access to `/status`. | Empty |
+|----------|-------------|---------|
+| `COMMAND_ROLE_ID` | Role ID required to use commands | None (everyone) |
+| `BOT_OWNER_ID` | Your user ID for special access | None |
 
-### Exports, reposting, and generated posts
-
+### Optional - Features
 | Variable | Description | Default |
-| --- | --- | --- |
-| `ROLE_ID` | Role mentioned by `/generate` for Community Custom Matches. | `1204073198837309491` |
-| `OUTPUT_DIR` | Directory where CSV export files are written. | `./exports` |
-| `DEFAULT_PER_CHANNEL_LIMIT` | Default max messages for exports; `0` means unlimited. | `0` |
-| `REPOST_MAX_SEND` | Safety cap for `/repost` sends per invocation. | `200` |
+|----------|-------------|---------|
+| `ROLE_ID` | Role to ping in /generate | 1204073198837309491 |
+| `OUTPUT_DIR` | Export files directory | ./exports |
+| `DEFAULT_PER_CHANNEL_LIMIT` | Max messages per export | 0 (unlimited) |
+| `REPOST_MAX_SEND` | Max messages /repost can send | 200 |
+| `DB_ONLY_COMMANDS` | If `true`, bot + deploy scripts load commands only from MongoDB dashboard records | false |
+| `WRITE_COMMAND_FILES` | If `true`, dashboard also writes uploaded/generated commands into `/commands` files | false |
 
-### Dashboard and MongoDB
+### ✅ Dashboard-only command mode (no `/commands` folder required)
+If you want to eliminate local command files and manage everything from the dashboard:
 
+1. Set `DB_ONLY_COMMANDS=true` in `.env`.
+2. Keep `WRITE_COMMAND_FILES=false` (or unset it) so dashboard uploads are stored only in MongoDB.
+3. Upload/create commands from the dashboard (`/api/commands/upload` or flow deploy).
+4. Run `npm run deploy` to register all DB commands to Discord.
+
+Notes:
+- The bot can now run fully from MongoDB command records.
+- `npm run deploy` will also fall back to MongoDB commands automatically if no file-based commands are found.
+
+### Optional - Logging
 | Variable | Description | Default |
-| --- | --- | --- |
-| `WEB_DASHBOARD_PORT` | Express dashboard port. | `3000` |
-| `DASHBOARD_PASSWORD` | Bearer token/password for dashboard APIs and login. | Empty |
-| `DASHBOARD_URL` | URL used by the bot to post command logs back to the dashboard. | `http://localhost:3000` |
-| `MONGODB_URI` | MongoDB connection string for command records and dashboard-managed commands. | Empty |
-| `DB_ONLY_COMMANDS` | If `true`, the bot and deploy script load only dashboard commands from MongoDB. | `false` |
-| `WRITE_COMMAND_FILES` | If `true`, dashboard-deployed commands are also written into `commands/`. | `false` |
+|----------|-------------|---------|
+| `LOG_FILE` | Main log file path | logs/bot.log |
+| `ERROR_LOG_FILE` | Error log file path | logs/error.log |
+| `LOG_LEVEL` | Logging level (error/warn/info/debug) | info |
+| `DASHBOARD_PASSWORD` | Auth token/password required by premium dashboard API | Required for dashboard |
 
-### Logging
+---
 
-| Variable | Description | Default |
-| --- | --- | --- |
-| `LOG_FILE` | Main log file path. | `logs/bot.log` |
-| `ERROR_LOG_FILE` | Error-only log file path. | `logs/error.log` |
-| `LOG_LEVEL` | Winston log level. | `info` |
-| `LOG_CHANNEL` | Fallback dashboard log channel ID if not set in `config.json`. | Empty |
-| `ERROR_CHANNEL` | Fallback dashboard error log channel ID if not set in `config.json`. | Empty |
 
-## NPM scripts
+## 🧱 Builder System Guide
 
-| Command | Purpose |
-| --- | --- |
-| `npm start` | Start the Discord bot. |
-| `npm run deploy` | Register slash commands to all configured guilds. |
-| `npm run dev` | Start the bot with `NODE_ENV=development`. |
-| `npm run dashboard` | Start the web dashboard. |
-| `npm run dashboard-premium` | Alias for the web dashboard. |
-| `npm run logs` | Tail the main bot log. |
-| `npm run errors` | Tail the error log. |
-| `npm run quality:check` | Check JS/JSON/Markdown formatting basics. |
-| `npm run quality:fix` | Auto-fix supported formatting issues. |
+A full beginner-friendly guide for command/embed/buttons/modals/select menus and response behavior is available at:
 
-## Command inventory
+- `docs/BUILDER_PLAYBOOK.md`
 
-### Utility and information
+It includes "if you set X, then Y happens" explanations and practical flow examples.
 
-| Command | Description |
-| --- | --- |
-| `/ping` | Check bot latency and Discord API ping. |
-| `/help` | Show available commands and descriptions. |
-| `/serverinfo` | Show detailed server information. |
-| `/userinfo [user]` | Show user account, guild, role, and permission details. |
-| `/status` | Show bot health, uptime, memory, and usage statistics. Admin/owner gated. |
-| `/createinvite` | Create an invite for a selected channel. |
-| `/quote` | Quote up to 10 Discord messages from links. |
-
-### Exports and analysis
-
-| Command | Description |
-| --- | --- |
-| `/export` | Export channel messages, or a range between two message IDs, to CSV. |
-| `/exportmessages` | Export specific message links/IDs to CSV. |
-| `/exportinvites` | Export unique users who posted a keyword to CSV. |
-| `/exportforumposts` | Export all messages from every post in a forum channel to CSV. |
-| `/fetchreactions` | Export messages with thumbs-up/thumbs-down reaction counts. |
-| `/membertrend` | Show daily server member-count snapshots for a date range. |
-| `/joinedafter` | Count members who joined after a UTC date. |
-
-### Moderation and member operations
-
-| Command | Description |
-| --- | --- |
-| `/cleanup` | Bulk-delete 1-100 messages, optionally filtered by user or bot authors. |
-| `/repost` | Fetch messages and repost them into a target channel with optional sanitization. |
-| `/rolemanage add/remove` | Bulk-add or bulk-remove a role for listed users. |
-| `/findids` | Find Discord user IDs from username input. |
-| `/listusers` | Paginated member list for a selected role. |
-| `/reactafter` | React to messages after a starting message link, one by one. |
-
-### Forum, schedule, and BGMI workflows
-
-| Command | Description |
-| --- | --- |
-| `/createpost` | Create a single forum post or open a bulk post session. |
-| `/schedule` | Generate randomized match schedules from map and mode pools. |
-| `/generate` | Post the Community Custom Matches schedule embed with optional link buttons. |
-
-## Command source modes
-
-### File-based mode (default)
-
-- `index.js` loads JavaScript command modules from `commands/`.
-- `deploy-commands.js` registers those commands to every guild in `GUILD_IDS`.
-- Dashboard commands stored in MongoDB can override file commands with the same slash command name
-  when the bot loads DB commands.
-
-### DB-only dashboard mode
-
-Use this when you want commands to live entirely in MongoDB and do not want to depend on the local `commands/` folder.
-
-```env
-DB_ONLY_COMMANDS=true
-WRITE_COMMAND_FILES=false
-MONGODB_URI=mongodb+srv://...
-```
-
-Then use the dashboard flow builder or command upload API, deploy from the dashboard or run
-`npm run deploy`, and start the bot with `npm start`.
-
-## Dashboard overview
-
-Start the dashboard with:
+---
+## 🔧 NPM Scripts
 
 ```bash
-npm run dashboard
+npm start          # Start the bot
+npm run deploy     # Deploy slash commands
+npm run dev        # Start in development mode
+npm run logs       # Tail main log file
+npm run errors     # Tail error log file
 ```
 
-The dashboard serves `public/premium.html` and exposes authenticated APIs for:
+---
 
-- bot process controls: start, stop, restart, status, logs, and log files;
-- settings: bot nickname, presence, log channels, DM toggle, dev mode, and command role;
-- command management: list, inspect, upload, delete, generate, deploy, and sync commands;
-- schedules and rich embed sending;
-- command log forwarding from the running bot.
+## 🛡️ Required Bot Permissions
 
-Set `DASHBOARD_PASSWORD` and send it as a bearer token for dashboard API calls.
+When inviting your bot, ensure it has these permissions:
 
-## Required Discord bot permissions
-
-Invite the bot with permissions that match the commands you plan to use:
-
+**Essential Permissions:**
 - View Channels
-- Send Messages
 - Read Message History
-- Use Slash Commands
-- Embed Links
+- Send Messages
 - Attach Files
-- Add Reactions
-- Manage Messages for `/cleanup`
-- Manage Roles for `/rolemanage`
-- Create Instant Invite for `/createinvite`
-- Manage Guild if you use server-level administrative workflows
+- Use External Emojis
+- Embed Links
 
-Also enable these privileged intents in the Discord Developer Portal when needed:
+**For Moderation Commands:**
+- Manage Messages (`/cleanup`)
+- Manage Roles (`/rolemanage`)
+- Manage Events (optional)
 
-- Server Members Intent
-- Message Content Intent
+**Privileged Intents Required:**
+- Server Members Intent (for `/findids`, `/listusers`)
+- Message Content Intent (for exports)
 
-## Project layout
+---
 
-```text
-commands/                 Slash command modules
-utils/command-loader.js   Shared command loader for bot and deploy script
-utils/builders.js         Small helpers for slash commands and embeds
-dashboard-premium.js      Express dashboard, command DB APIs, flow generation, embed sending
-db.js                     MongoDB connection and command model helpers
-index.js                  Discord bot runtime
-deploy-commands.js        Guild slash command registration script
-public/                   Dashboard HTML, CSS, and client JS
-docs/                     Maintainer notes and builder playbook
+## 📊 Feature Highlights
+
+### 🎯 Smart Cooldown System
+Prevents command spam with per-user cooldowns. Administrators bypass cooldowns automatically.
+
+### 📈 Usage Statistics
+Track command usage, error rates, and bot performance in real-time with `/status`.
+
+### 🗂️ Advanced Exports
+- Export to Excel-safe CSV format
+- Support for message ranges
+- Keyword-based user extraction
+- Automatic DM delivery with fallbacks
+
+### 🧹 Intelligent Cleanup
+- Filter by user or bot messages
+- Handles messages older than 14 days
+- Bulk delete with rate limit protection
+
+### 📝 Comprehensive Logging
+- Colored console output
+- Separate error logs
+- Automatic log rotation (5MB max per file)
+- Configurable log levels
+
+---
+
+## 🐛 Troubleshooting
+
+### Commands Not Appearing
+```bash
+# Re-deploy commands
+npm run deploy
 ```
 
-## Documentation
+If you're using MongoDB-only mode (`DB_ONLY_COMMANDS=true`), upload/modify commands from the dashboard and then run `npm run deploy` to push DB commands to Discord.
 
-- `docs/BUILDER_PLAYBOOK.md` explains the current command/embed helper APIs and how to build richer
-  Discord.js components directly.
-- `docs/CODE_ANALYSIS.md` summarizes the current architecture, command-loading behavior, and maintenance notes.
-- `CHANGELOG.md` records documentation and project changes.
+### Permission Errors
+- Check bot role position (must be above managed roles)
+- Verify bot has required permissions in the channel
+- Ensure Privileged Intents are enabled in Developer Portal
+
+### High Memory Usage
+- Check `/status` for memory metrics
+- Restart bot if heap usage >90%
+- Reduce `DEFAULT_PER_CHANNEL_LIMIT` for large exports
+
+### Export Failures
+- Verify bot has Read Message History permission
+- Check if target channel is accessible
+- Ensure OUTPUT_DIR exists and is writable
+
+---
+
+## 📦 File Structure
+
+```
+discord-utility-bot/
+├── index.js                  # Main bot file with enhanced features
+├── deploy-commands.js        # Command registration script
+├── logger.js                 # Winston logging configuration
+├── config.json              # Runtime configuration
+├── package.json             # Dependencies and scripts
+├── .env.example             # Environment template
+├── commands/                # All command files
+│   ├── help.js
+│   ├── ping.js
+│   ├── status.js
+│   ├── userinfo.js
+│   ├── cleanup.js
+│   └── ... (15 total commands)
+├── logs/                    # Log files (auto-created)
+│   ├── bot.log
+│   └── error.log
+└── exports/                 # CSV exports (auto-created)
+```
+
+---
+
+## 🔄 Changelog
+
+### v2.0.0 (Current)
+- ✨ Added `/help`, `/userinfo`, `/cleanup` commands
+- 📊 Enhanced `/status` with detailed statistics
+- 🎨 Improved console output with colors
+- ⏱️ Added cooldown system
+- 📈 Command usage tracking
+- 🔄 Log rotation
+- 🐛 Better error handling
+- 📝 Comprehensive documentation
+
+### v1.0.0
+- Initial release with basic commands
+
+---
+
+## 📄 License
+
+MIT License - Feel free to modify and distribute
+
+## 🤝 Support
+
+For issues or feature requests, please check the logs first:
+```bash
+npm run errors  # Check error logs
+npm run logs    # Check main logs
+```
+
+---
+
+**Made with ❤️ for Discord community management**

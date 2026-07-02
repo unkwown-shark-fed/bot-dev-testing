@@ -23,11 +23,6 @@ const WebSocket    = require('ws');
 const { REST, Routes } = require('discord.js');
 const mongoose     = require('mongoose');
 const db           = require('./db');
-const { getScheduleModel } = require('./dashboard/models/schedule');
-const {
-  buildInvalidCommandUploadResponse,
-  loadModuleFromString,
-} = require('./dashboard/services/code-loader');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PORT      = parseInt(process.env.WEB_DASHBOARD_PORT || '3000', 10);
@@ -39,14 +34,26 @@ const WRITE_COMMAND_FILES = String(process.env.WRITE_COMMAND_FILES || '').toLowe
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_IDS = (process.env.GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-const loadCommandModuleFromString = (code, filename) => loadModuleFromString(code, {
-  commandDir: CMD_DIR || ROOT,
-  filename,
-});
 
 if (!PASSWORD) {
   console.error('❌ DASHBOARD_PASSWORD is required in environment. Refusing to start dashboard.');
   process.exit(1);
+}
+
+// ── Schedule Model ─────────────────────────────────────────────────────────────
+function getScheduleModel() {
+  if (mongoose.models.Schedule) return mongoose.models.Schedule;
+  const scheduleSchema = new mongoose.Schema({
+    label:     { type: String, default: 'Unnamed' },
+    channel:   { type: String, required: true },
+    message:   { type: String, default: '' },
+    repeat:    { type: String, enum: ['once','hourly','daily','weekly'], default: 'once' },
+    nextRun:   { type: Date, default: null },
+    active:    { type: Boolean, default: true },
+    embed:     { type: mongoose.Schema.Types.Mixed, default: null },
+    createdAt: { type: Date, default: Date.now },
+  });
+  return mongoose.model('Schedule', scheduleSchema);
 }
 
 // ── Express ───────────────────────────────────────────────────────────────────
@@ -321,7 +328,7 @@ app.post('/api/danger/:op', auth, async (req, res) => {
 app.get('/api/schedules', auth, async (_req, res) => {
   try {
     await db.connect();
-    const Schedule = getScheduleModel(mongoose);
+    const Schedule = getScheduleModel();
     const schedules = await Schedule.find().sort({ createdAt: -1 }).lean();
     res.json({ success: true, schedules });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -330,7 +337,7 @@ app.get('/api/schedules', auth, async (_req, res) => {
 app.post("/api/schedules", auth, async (req, res) => {
   try {
     await db.connect();
-    const Schedule = getScheduleModel(mongoose);
+    const Schedule = getScheduleModel();
     // Always set a valid nextRun — if not provided, default to NOW so
     // the runner picks it up on the very next tick (within 1 minute).
     let nextRun = req.body.nextRun ? new Date(req.body.nextRun) : new Date();
@@ -343,7 +350,7 @@ app.post("/api/schedules", auth, async (req, res) => {
 app.patch("/api/schedules/:id", auth, async (req, res) => {
   try {
     await db.connect();
-    const Schedule = getScheduleModel(mongoose);
+    const Schedule = getScheduleModel();
     const update = { ...req.body };
     if (update.nextRun) {
       const d = new Date(update.nextRun);
@@ -357,7 +364,7 @@ app.patch("/api/schedules/:id", auth, async (req, res) => {
 app.delete('/api/schedules/:id', auth, async (req, res) => {
   try {
     await db.connect();
-    const Schedule = getScheduleModel(mongoose);
+    const Schedule = getScheduleModel();
     await Schedule.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -396,7 +403,7 @@ app.post('/api/commands/upload', auth, async (req, res) => {
 
   let cmdModule;
   try {
-    cmdModule = loadCommandModuleFromString(code);
+    cmdModule = loadModuleFromString(code);
   } catch (e) {
     return res.status(400).json({ error: `Code syntax error: ${e.message}` });
   }
@@ -491,7 +498,7 @@ app.post('/api/flow/deploy', auth, async (req, res) => {
   if (!GUILD_IDS.length) return res.status(400).json({ error: 'GUILD_IDS missing in .env' });
 
   let cmdModule;
-  try { cmdModule = loadCommandModuleFromString(code); }
+  try { cmdModule = loadModuleFromString(code); }
   catch (e) { return res.status(400).json({ error: `Code syntax error: ${e.message}` }); }
   if (!cmdModule?.data?.toJSON)
     return res.status(400).json({ error: 'Generated code missing valid data property' });
@@ -572,7 +579,7 @@ app.post('/api/sync', auth, async (_req, res) => {
       for (const cmd of allCmds) {
         if (cmd.source !== 'dashboard' || !cmd.code) continue;
         try {
-          const mod = loadCommandModuleFromString(cmd.code);
+          const mod = loadModuleFromString(cmd.code);
           if (mod?.data?.toJSON) jsonCmds.push(mod.data.toJSON());
         } catch (_) {}
       }
@@ -592,6 +599,37 @@ app.post('/api/sync', auth, async (_req, res) => {
     message: `Synced ${loaded.length} commands to MongoDB${results.guilds.length ? ' and re-registered all to Discord' : ''}`,
   });
 });
+
+// ── Helper: load module from code string ──────────────────────────────────────
+function loadModuleFromString(code) {
+  const Module = require('module');
+  const m = new Module('');
+  m.filename = path.join(CMD_DIR || ROOT, '_preview.js');
+  m.paths = Module._nodeModulePaths(CMD_DIR || ROOT);
+  m._compile(code, m.filename);
+  return m.exports;
+}
+
+
+function buildInvalidCommandUploadResponse(code, cmdModule) {
+  const exportKeys = cmdModule && typeof cmdModule === 'object' ? Object.keys(cmdModule) : [];
+  const hasModuleExports = /\bmodule\.exports\b|\bexports\./.test(code);
+  const looksLikeBotEntrypoint = /\bnew\s+Client\s*\(|\bclient\.login\s*\(/.test(code);
+
+  const hints = [`Found export keys: ${exportKeys.length ? exportKeys.join(', ') : '(none)'}`];
+  if (!hasModuleExports) {
+    hints.push('This file does not appear to export anything (missing module.exports / exports.*).');
+  }
+  if (looksLikeBotEntrypoint) {
+    hints.push('The uploaded code looks like a bot entry file (index.js), not a slash command module.');
+  }
+
+  return {
+    error: 'Code must export { data: SlashCommandBuilder, execute() }',
+    hint: hints.join(' '),
+    example: "module.exports = { data: new SlashCommandBuilder().setName('ping').setDescription('...'), async execute(interaction) { await interaction.reply('pong'); } }",
+  };
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  CODE GENERATOR
@@ -1494,7 +1532,7 @@ async function runScheduler() {
   if (!TOKEN || !GUILD_IDS.length) return;
   try {
     await db.connect();
-    const Schedule = getScheduleModel(mongoose);
+    const Schedule = getScheduleModel();
     const now = new Date();
     const due = await Schedule.find({ active: true, $or: [{ nextRun: { $lte: now } }, { nextRun: null }] });
     console.log(`[scheduler] Tick — ${due.length} schedule(s) due`);
