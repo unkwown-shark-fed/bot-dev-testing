@@ -14,7 +14,7 @@ module.exports = {
       '📤 Export': ['export', 'exportmessages', 'exportinvites', 'fetchreactions'],
       '⚙️ Moderation': ['cleanup', 'repost', 'rolemanage'],
       '🔍 Search': ['findids', 'listusers'],
-      '🎮 Gaming': ['schedule', 'generate']
+      '🎮 Gaming': ['generate']
     };
 
     const embed = createEmbed({

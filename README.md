@@ -85,7 +85,6 @@ npm start
 ### 🎮 Gaming Commands
 | Command | Description | Cooldown |
 |---------|-------------|----------|
-| `/schedule` | Generate randomized match schedule | 3s |
 | `/generate` | Post Community Custom Matches schedule | 10s |
 
 ---
@@ -120,7 +119,7 @@ If you want to eliminate local command files and manage everything from the dash
 
 1. Set `DB_ONLY_COMMANDS=true` in `.env`.
 2. Keep `WRITE_COMMAND_FILES=false` (or unset it) so dashboard uploads are stored only in MongoDB.
-3. Upload/create commands from the dashboard (`/api/commands/upload` or flow deploy).
+3. Upload commands from the dashboard (`/api/commands/upload`).
 4. Run `npm run deploy` to register all DB commands to Discord.
 
 Notes:
@@ -138,15 +137,6 @@ Notes:
 ---
 
 
-## 🧱 Builder System Guide
-
-A full beginner-friendly guide for command/embed/buttons/modals/select menus and response behavior is available at:
-
-- `docs/BUILDER_PLAYBOOK.md`
-
-It includes "if you set X, then Y happens" explanations and practical flow examples.
-
----
 ## 🔧 NPM Scripts
 
 ```bash
