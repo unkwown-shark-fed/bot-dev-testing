@@ -424,64 +424,76 @@ function sanitizeName(n) {
 
 // ── Sync all /commands files into MongoDB ─────────────────────────────────────
 app.post('/api/sync', auth, async (_req, res) => {
-  const files  = fs.existsSync(CMD_DIR) ? fs.readdirSync(CMD_DIR).filter(f => f.endsWith('.js')) : [];
-  const loaded = [];
-  const failed = [];
+  // Express 4 does NOT auto-catch rejected promises in async handlers — an
+  // uncaught throw anywhere below (e.g. Mongo down/unreachable, bad
+  // DISCORD_TOKEN) would otherwise leave this request hanging forever and
+  // the dashboard's "Syncing…" button would never resolve. Wrap everything.
+  try {
+    const files  = fs.existsSync(CMD_DIR) ? fs.readdirSync(CMD_DIR).filter(f => f.endsWith('.js')) : [];
+    const loaded = [];
+    const failed = [];
 
-  for (const file of files) {
-    try {
-      const fp = path.join(CMD_DIR, file);
-      delete require.cache[require.resolve(fp)];
-      const mod = require(fp);
-      if (mod?.data?.name) loaded.push({ name: mod.data.name, description: mod.data.description || '' });
-    } catch (e) { failed.push({ file, error: e.message }); }
-  }
+    for (const file of files) {
+      try {
+        const fp = path.join(CMD_DIR, file);
+        delete require.cache[require.resolve(fp)];
+        const mod = require(fp);
+        if (mod?.data?.name) loaded.push({ name: mod.data.name, description: mod.data.description || '' });
+      } catch (e) { failed.push({ file, error: e.message }); }
+    }
 
-  await db.syncFileCommands(loaded);
+    await db.syncFileCommands(loaded);
 
-  const results = { guilds: [], errors: [] };
-  if (TOKEN && CLIENT_ID && GUILD_IDS.length) {
-    try {
-      const rest    = new REST({ version: '10' }).setToken(TOKEN);
-      const allCmds = await db.getAllCommands();
-      const jsonCmds = [];
+    const results = { guilds: [], errors: [] };
+    if (TOKEN && CLIENT_ID && GUILD_IDS.length) {
+      try {
+        const rest    = new REST({ version: '10' }).setToken(TOKEN);
+        const allCmds = await db.getAllCommands();
+        const jsonCmds = [];
 
-      // Keep file-based commands (if present)
-      for (const cmd of allCmds) {
-        try {
+        // Keep file-based commands (if present)
+        for (const cmd of allCmds) {
+          try {
+            const fp = path.join(CMD_DIR, `${cmd.name}.js`);
+            if (!fs.existsSync(fp)) continue;
+            delete require.cache[require.resolve(fp)];
+            const mod = require(fp);
+            if (mod?.data?.toJSON) jsonCmds.push(mod.data.toJSON());
+          } catch (_) {}
+        }
+
+        // Also include dashboard commands stored only in MongoDB.
+        // Without this, syncing with WRITE_COMMAND_FILES=false can overwrite
+        // guild commands with an empty list (appears as "no commands load").
+        // Skip any whose file already exists — that copy was already added
+        // above, and Discord's bulk overwrite rejects duplicate command names.
+        for (const cmd of allCmds) {
+          if (cmd.source !== 'dashboard' || !cmd.code) continue;
           const fp = path.join(CMD_DIR, `${cmd.name}.js`);
-          if (!fs.existsSync(fp)) continue;
-          delete require.cache[require.resolve(fp)];
-          const mod = require(fp);
-          if (mod?.data?.toJSON) jsonCmds.push(mod.data.toJSON());
-        } catch (_) {}
-      }
+          if (fs.existsSync(fp)) continue;
+          try {
+            const mod = loadModuleFromString(cmd.code);
+            if (mod?.data?.toJSON) jsonCmds.push(mod.data.toJSON());
+          } catch (_) {}
+        }
 
-      // Also include dashboard commands stored only in MongoDB.
-      // Without this, syncing with WRITE_COMMAND_FILES=false can overwrite
-      // guild commands with an empty list (appears as "no commands load").
-      for (const cmd of allCmds) {
-        if (cmd.source !== 'dashboard' || !cmd.code) continue;
-        try {
-          const mod = loadModuleFromString(cmd.code);
-          if (mod?.data?.toJSON) jsonCmds.push(mod.data.toJSON());
-        } catch (_) {}
-      }
+        for (const gid of GUILD_IDS) {
+          const r = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, gid), { body: jsonCmds });
+          results.guilds.push({ guild: gid, registered: r.length });
+        }
+      } catch (e) { results.errors.push(e.message); }
+    }
 
-      for (const gid of GUILD_IDS) {
-        const r = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, gid), { body: jsonCmds });
-        results.guilds.push({ guild: gid, registered: r.length });
-      }
-    } catch (e) { results.errors.push(e.message); }
+    res.json({
+      success: true,
+      synced:  loaded.length,
+      failed,
+      guilds:  results.guilds,
+      message: `Synced ${loaded.length} commands to MongoDB${results.guilds.length ? ' and re-registered all to Discord' : ''}`,
+    });
+  } catch (e) {
+    res.status(500).json({ error: `Sync failed: ${e.message}` });
   }
-
-  res.json({
-    success: true,
-    synced:  loaded.length,
-    failed,
-    guilds:  results.guilds,
-    message: `Synced ${loaded.length} commands to MongoDB${results.guilds.length ? ' and re-registered all to Discord' : ''}`,
-  });
 });
 
 // ── Helper: load module from code string ──────────────────────────────────────

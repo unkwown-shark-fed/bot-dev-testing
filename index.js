@@ -148,12 +148,34 @@ const dbLoadPromise = (async () => {
   }
 })();
 
+// ── Member snapshot job (feeds /membertrend) ─────────────────────────────────
+// Records/refreshes today's member count for every guild the bot is in.
+// Safe to call repeatedly — it upserts on {guildId, dateKey} so it only ever
+// keeps one row per guild per UTC day.
+async function takeMemberSnapshots() {
+  const dateKey = new Date().toISOString().slice(0, 10);
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      await db.recordMemberSnapshot(guild.id, guild.memberCount, dateKey);
+    } catch (e) {
+      logger.warn(`[membertrend] Failed to record snapshot for guild ${guild.id}: ${e.message}`);
+    }
+  }
+}
+
 // ── Ready ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   logger.info(`✅ Logged in as ${client.user.tag}`);
   logger.info(`🌐 Serving ${client.guilds.cache.size} guild(s)`);
 
   await dbLoadPromise;
+
+  // Take an initial snapshot now, then refresh hourly so today's count stays
+  // current and every UTC day gets at least one recorded data point.
+  takeMemberSnapshots().catch(e => logger.warn(`[membertrend] Initial snapshot failed: ${e.message}`));
+  setInterval(() => {
+    takeMemberSnapshots().catch(e => logger.warn(`[membertrend] Snapshot job failed: ${e.message}`));
+  }, 60 * 60 * 1000); // hourly
 
   const totalLoaded = client.commands.size;
   logger.info(`📊 Total commands ready: ${totalLoaded} — ${Array.from(client.commands.keys()).join(', ')}`);
