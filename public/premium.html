@@ -247,6 +247,27 @@
 let TOK   = localStorage.getItem('bst');
 let pTimer = null;
 
+// ── TOAST ─────────────────────────────────────────────────────────────────
+// Was called throughout this file (sync, upload, delete, settings, danger
+// zone) but never defined — every one of those calls threw an uncaught
+// ReferenceError, which silently aborted whatever function called it
+// (e.g. leaving the Sync button stuck on "Syncing…" forever).
+function toast(message, kind = 'inf') {
+  const container = document.getElementById('toasts');
+  if (!container) return;
+
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`;
+  el.textContent = message;
+  container.appendChild(el);
+
+  setTimeout(() => {
+    el.style.transition = 'opacity .25s ease';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 250);
+  }, 4000);
+}
+
 // ── AUTH ───────────────────────────────────────────────────────────────────
 async function login() {
   const pwInput = document.getElementById('lpw');
