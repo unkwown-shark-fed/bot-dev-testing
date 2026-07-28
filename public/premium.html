@@ -30,41 +30,52 @@
 
   <!-- Mobile sidebar (shown via hamburger) -->
   <div class="sidebar" id="sidebar">
+    <div class="rail-logo"><span class="dot"></span>Bot Studio</div>
     <div class="sidebar-nav">
-      <div class="snav-item on"     onclick="nav('library',this);closeSidebar()"><span class="si">🗄</span>Library</div>
-      <div class="snav-item"     onclick="nav('commands',this);closeSidebar()"><span class="si">📦</span>Commands</div>
-      <div class="snav-item"     onclick="nav('control',this);closeSidebar()"><span class="si">🎮</span>Control</div>
-      <div class="snav-item"     onclick="nav('logs',this);closeSidebar()"><span class="si">📝</span>Logs</div>
-      <div class="snav-item"     onclick="nav('settings',this);closeSidebar()"><span class="si">⚙️</span>Bot Settings</div>
+      <div class="snav-item on" onclick="nav('library',this);closeSidebar()"><span class="si">🗄</span>Library</div>
+      <div class="snav-item"    onclick="nav('commands',this);closeSidebar()"><span class="si">📦</span>Commands</div>
+      <div class="snav-item"    onclick="nav('control',this);closeSidebar()"><span class="si">🎮</span>Control</div>
+      <div class="snav-item"    onclick="nav('logs',this);closeSidebar()"><span class="si">📝</span>Logs</div>
+      <div class="snav-item"    onclick="nav('settings',this);closeSidebar()"><span class="si">⚙️</span>Bot Settings</div>
     </div>
   </div>
 
-  <!-- Top bar -->
-  <header class="tbar">
-    <button class="ham" id="ham" onclick="toggleSidebar()" aria-label="Menu">
-      <span></span><span></span><span></span>
-    </button>
-    <span class="tbar-logo">⚡ Studio</span>
-
-    <!-- Desktop tabs -->
-    <nav class="tbar-tabs">
-      <button class="ttab on"     onclick="nav('library',this)">🗄 Library</button>
-      <button class="ttab"     onclick="nav('commands',this)">📦 Commands</button>
-      <button class="ttab"     onclick="nav('control',this)">🎮 Control</button>
-      <button class="ttab"     onclick="nav('logs',this)">📝 Logs</button>
-      <button class="ttab"     onclick="nav('settings',this)">⚙️ Settings</button>
-    </nav>
-
-    <div class="tbar-spacer"></div>
-    <div class="tbar-status">
-      <div class="sdot" id="sdot"></div>
-      <span id="stxt">Offline</span>
+  <!-- Desktop rail (primary nav) -->
+  <nav class="rail">
+    <div class="rail-logo"><span class="dot"></span>Bot Studio</div>
+    <div class="rail-nav">
+      <button class="ttab on" onclick="nav('library',this)"><span class="ic">🗄</span>Library</button>
+      <button class="ttab"    onclick="nav('commands',this)"><span class="ic">📦</span>Commands</button>
+      <button class="ttab"    onclick="nav('control',this)"><span class="ic">🎮</span>Control</button>
+      <button class="ttab"    onclick="nav('logs',this)"><span class="ic">📝</span>Logs</button>
+      <button class="ttab"    onclick="nav('settings',this)"><span class="ic">⚙️</span>Bot Settings</button>
     </div>
-    <button class="tbtn" onclick="logout()">Logout</button>
-  </header>
+    <div class="rail-foot">
+      <div class="tbar-status" style="width:100%; justify-content:center;">
+        <div class="sdot" id="sdot-rail"></div>
+        <span id="stxt-rail">Offline</span>
+      </div>
+      <button class="tbtn" style="width:100%;" onclick="logout()">Logout</button>
+    </div>
+  </nav>
 
-  <!-- Body -->
   <div class="body-wrap">
+    <!-- Top bar (mobile: hamburger + logo; desktop: slim status strip) -->
+    <header class="tbar">
+      <button class="ham" id="ham" onclick="toggleSidebar()" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="tbar-logo">⚡ Studio</span>
+
+      <div class="tbar-spacer"></div>
+      <div class="tbar-status">
+        <div class="sdot" id="sdot"></div>
+        <span id="stxt">Offline</span>
+      </div>
+      <button class="tbtn" onclick="logout()">Logout</button>
+    </header>
+
+    <!-- Body -->
     <div class="pages">
 
       <!-- ── LIBRARY ────────────────────────────────────────────────────── -->
@@ -248,10 +259,6 @@ let TOK   = localStorage.getItem('bst');
 let pTimer = null;
 
 // ── TOAST ─────────────────────────────────────────────────────────────────
-// Was called throughout this file (sync, upload, delete, settings, danger
-// zone) but never defined — every one of those calls threw an uncaught
-// ReferenceError, which silently aborted whatever function called it
-// (e.g. leaving the Sync button stuck on "Syncing…" forever).
 function toast(message, kind = 'inf') {
   const container = document.getElementById('toasts');
   if (!container) return;
@@ -357,6 +364,16 @@ if (TOK) {
   });
 }
 
+// ── SIDEBAR (mobile drawer) ─────────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('on');
+  document.getElementById('sov').classList.toggle('on');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('on');
+  document.getElementById('sov').classList.remove('on');
+}
+
 // ── NAV ────────────────────────────────────────────────────────────────────
 let activeNav = 'library';
 function nav(id, btn) {
@@ -366,8 +383,8 @@ function nav(id, btn) {
   document.querySelectorAll('.snav-item').forEach(b => b.classList.remove('on'));
   document.getElementById('pg-' + id).classList.add('on');
   if (btn) btn.classList.add('on');
-  // Also sync sidebar highlight
-  document.querySelectorAll('.snav-item').forEach(b => {
+  // Sync both rail (desktop) and drawer (mobile) highlight regardless of which was clicked
+  document.querySelectorAll('.ttab, .snav-item').forEach(b => {
     if (b.getAttribute('onclick')?.includes(`'${id}'`)) b.classList.add('on');
   });
   if (id === 'commands') loadCmds();
@@ -398,8 +415,15 @@ async function tick() {
 }
 function setStatus(s) {
   const on = s === 'running';
-  document.getElementById('sdot').className = 'sdot' + (on ? ' on' : '');
-  document.getElementById('stxt').textContent = on ? 'Online' : (s === 'stopping' ? 'Stopping…' : 'Offline');
+  const label = on ? 'Online' : (s === 'stopping' ? 'Stopping…' : 'Offline');
+  ['sdot', 'sdot-rail'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'sdot' + (on ? ' on' : '');
+  });
+  ['stxt', 'stxt-rail'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = label;
+  });
   document.getElementById('bs').disabled = on;
   document.getElementById('bx').disabled = !on;
   document.getElementById('br').disabled = !on;
