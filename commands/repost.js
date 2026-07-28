@@ -190,7 +190,11 @@ module.exports = {
       if (startId && endId) {
         messages = await fetchMessagesBetween(source, startId, endId);
       } else {
+        // fetchAllMessagesFromChannel returns messages newest-first (Discord's
+        // default fetch order). Reverse so they get reposted oldest-first,
+        // preserving the original conversation order in the target channel.
         messages = await fetchAllMessagesFromChannel(source, userLimit);
+        messages.reverse();
       }
 
       if (!messages || messages.length === 0) {
