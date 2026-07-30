@@ -1,5 +1,7 @@
 # 🤖 Discord Utility Bot v2.0 - Enhanced Edition
 
+> Documentation refresh: command, dashboard, and quality-check details are current as of 2026-07-30.
+
 A powerful, feature-rich Discord bot with export capabilities, moderation tools, and user management.
 
 ## ✨ What's New in v2.0
@@ -56,36 +58,44 @@ npm start
 | Command | Description | Cooldown |
 |---------|-------------|----------|
 | `/ping` | Check bot latency and API ping | 3s |
-| `/help` | Show all available commands | 5s |
+| `/help` | Show all available commands and descriptions | 5s |
 | `/serverinfo` | Display detailed server information | 5s |
 | `/userinfo [user]` | Display detailed user information | 5s |
-| `/status` | Bot health and statistics (admin only) | 3s |
+| `/status` | Bot health, uptime, and statistics (admin only) | 3s |
+| `/createinvite` | Create an invite link for a specific channel | 10s |
 
 ### 📤 Export Commands
 | Command | Description | Cooldown |
 |---------|-------------|----------|
-| `/export` | Export channel messages to CSV | 30s |
+| `/export` | Export channel messages or a message range to CSV | 30s |
 | `/exportmessages` | Export specific messages by link/ID to CSV | 10s |
 | `/exportinvites` | Export users who posted a keyword to CSV | 15s |
+| `/exportforumposts` | Export messages from every post in a forum channel to CSV | 30s |
+| `/fetchreactions` | Export messages with thumbs-up/thumbs-down reaction counts | 15s |
 
-### ⚙️ Moderation Commands
+### ⚙️ Moderation and Posting Commands
 | Command | Description | Cooldown |
 |---------|-------------|----------|
 | `/cleanup` | Bulk delete messages (1-100) with filters | 10s |
 | `/repost` | Repost messages from one channel to another | 10s |
 | `/rolemanage add/remove` | Bulk add/remove roles from users | 15s |
+| `/createpost` | Create one post or open a bulk posting session | 10s |
+| `/quote` | Quote one or more Discord messages by link | 10s |
 
-### 🔍 Search Commands
+### 🔍 Search and Member Commands
 | Command | Description | Cooldown |
 |---------|-------------|----------|
 | `/findids` | Find user IDs by searching usernames | 10s |
 | `/listusers` | Paginated list of members with a role | N/A |
 | `/reactafter` | React to messages after a starting message link | 10s |
+| `/joinedafter` | Count members who joined after a date | 10s |
+| `/membertrend` | Show daily member-count snapshots for a date range | 10s |
 
 ### 🎮 Gaming Commands
 | Command | Description | Cooldown |
 |---------|-------------|----------|
-| `/generate` | Post Community Custom Matches schedule | 10s |
+| `/generate` | Post Community Custom Matches schedule with optional buttons | 10s |
+| `/generate_v2` | Post code-configured Community Custom Matches schedule | 10s |
 
 ---
 
@@ -111,8 +121,8 @@ npm start
 | `OUTPUT_DIR` | Export files directory | ./exports |
 | `DEFAULT_PER_CHANNEL_LIMIT` | Max messages per export | 0 (unlimited) |
 | `REPOST_MAX_SEND` | Max messages /repost can send | 200 |
-| `DB_ONLY_COMMANDS` | If `true`, bot + deploy scripts load commands only from MongoDB dashboard records | false |
-| `WRITE_COMMAND_FILES` | If `true`, dashboard also writes uploaded/generated commands into `/commands` files | false |
+| `DB_ONLY_COMMANDS` | If `true`, bot and deploy scripts load commands only from MongoDB dashboard records | false |
+| `WRITE_COMMAND_FILES` | If `true`, dashboard writes uploaded/generated commands into `/commands` files | false |
 
 ### ✅ Dashboard-only command mode (no `/commands` folder required)
 If you want to eliminate local command files and manage everything from the dashboard:
@@ -145,6 +155,9 @@ npm run deploy     # Deploy slash commands
 npm run dev        # Start in development mode
 npm run logs       # Tail main log file
 npm run errors     # Tail error log file
+npm run dashboard  # Start the premium dashboard
+npm run quality:check # Run repository code-quality checks
+npm run quality:fix   # Auto-fix supported code-quality issues
 ```
 
 ---
@@ -168,7 +181,7 @@ When inviting your bot, ensure it has these permissions:
 
 **Privileged Intents Required:**
 - Server Members Intent (for `/findids`, `/listusers`)
-- Message Content Intent (for exports)
+- Message Content Intent (for exports, reposting, quoting, and reaction utilities)
 
 ---
 
@@ -207,7 +220,8 @@ Track command usage, error rates, and bot performance in real-time with `/status
 npm run deploy
 ```
 
-If you're using MongoDB-only mode (`DB_ONLY_COMMANDS=true`), upload/modify commands from the dashboard and then run `npm run deploy` to push DB commands to Discord.
+If you're using MongoDB-only mode (`DB_ONLY_COMMANDS=true`), upload or modify commands from the dashboard.
+Then run `npm run deploy` to push DB commands to Discord.
 
 ### Permission Errors
 - Check bot role position (must be above managed roles)
