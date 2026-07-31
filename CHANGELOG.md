@@ -2,12 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-
-### Changed
-- Refreshed Markdown documentation to match the current command set, dashboard scripts, and quality-check workflow.
-- Updated code-analysis notes to reflect the resolved `fs` import issue and current command-loading architecture.
-
 ## [2.0.0] - 2026-02-18
 
 ### Added

@@ -37,17 +37,6 @@ const commandSchema = new mongoose.Schema({
 
 const Command = mongoose.models.Command || mongoose.model('Command', commandSchema);
 
-// ── Member snapshot schema (daily member-count history, used by /membertrend) ─
-const memberSnapshotSchema = new mongoose.Schema({
-  guildId:     { type: String, required: true },
-  dateKey:     { type: String, required: true }, // YYYY-MM-DD (UTC)
-  memberCount: { type: Number, required: true },
-  recordedAt:  { type: Date, default: Date.now },
-});
-memberSnapshotSchema.index({ guildId: 1, dateKey: 1 }, { unique: true });
-
-const MemberSnapshot = mongoose.models.MemberSnapshot || mongoose.model('MemberSnapshot', memberSnapshotSchema);
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getAllCommands() {
@@ -128,30 +117,9 @@ async function syncFileCommands(commandsArray) {
   }
 }
 
-// Record (or refresh) today's member-count snapshot for a guild.
-async function recordMemberSnapshot(guildId, memberCount, dateKey = null) {
-  await connect();
-  const key = dateKey || new Date().toISOString().slice(0, 10);
-  return MemberSnapshot.findOneAndUpdate(
-    { guildId, dateKey: key },
-    { $set: { memberCount, recordedAt: new Date() } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-}
-
-// Fetch stored snapshots for a guild between two dateKeys (inclusive), ascending by date.
-async function getMemberSnapshots(guildId, fromDateKey, toDateKey) {
-  await connect();
-  return MemberSnapshot.find({
-    guildId,
-    dateKey: { $gte: fromDateKey, $lte: toDateKey },
-  }).sort({ dateKey: 1 }).lean();
-}
-
 module.exports = {
   connect,
   Command,
-  MemberSnapshot,
   getAllCommands,
   getCommand,
   upsertCommand,
@@ -159,6 +127,4 @@ module.exports = {
   incrementUsage,
   incrementError,
   syncFileCommands,
-  recordMemberSnapshot,
-  getMemberSnapshots,
 };

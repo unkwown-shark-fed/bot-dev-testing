@@ -30,97 +30,45 @@
 
   <!-- Mobile sidebar (shown via hamburger) -->
   <div class="sidebar" id="sidebar">
-    <div class="rail-logo"><span class="dot"></span>Bot Studio</div>
     <div class="sidebar-nav">
-      <div class="snav-item on" onclick="nav('overview',this);closeSidebar()"><span class="si">✨</span>Overview</div>
-      <div class="snav-item"    onclick="nav('library',this);closeSidebar()"><span class="si">🗄</span>Library</div>
-      <div class="snav-item"    onclick="nav('commands',this);closeSidebar()"><span class="si">📦</span>Commands</div>
-      <div class="snav-item"    onclick="nav('control',this);closeSidebar()"><span class="si">🎮</span>Control</div>
-      <div class="snav-item"    onclick="nav('logs',this);closeSidebar()"><span class="si">📝</span>Logs</div>
-      <div class="snav-item"    onclick="nav('settings',this);closeSidebar()"><span class="si">⚙️</span>Bot Settings</div>
+      <div class="snav-item on"     onclick="nav('library',this);closeSidebar()"><span class="si">🗄</span>Library</div>
+      <div class="snav-item"     onclick="nav('commands',this);closeSidebar()"><span class="si">📦</span>Commands</div>
+      <div class="snav-item"     onclick="nav('control',this);closeSidebar()"><span class="si">🎮</span>Control</div>
+      <div class="snav-item"     onclick="nav('logs',this);closeSidebar()"><span class="si">📝</span>Logs</div>
+      <div class="snav-item"     onclick="nav('settings',this);closeSidebar()"><span class="si">⚙️</span>Bot Settings</div>
     </div>
   </div>
 
-  <!-- Desktop rail (primary nav) -->
-  <nav class="rail">
-    <div class="rail-logo"><span class="dot"></span>Bot Studio</div>
-    <div class="rail-nav">
-      <button class="ttab on" onclick="nav('overview',this)"><span class="ic">✨</span>Overview</button>
-      <button class="ttab"    onclick="nav('library',this)"><span class="ic">🗄</span>Library</button>
-      <button class="ttab"    onclick="nav('commands',this)"><span class="ic">📦</span>Commands</button>
-      <button class="ttab"    onclick="nav('control',this)"><span class="ic">🎮</span>Control</button>
-      <button class="ttab"    onclick="nav('logs',this)"><span class="ic">📝</span>Logs</button>
-      <button class="ttab"    onclick="nav('settings',this)"><span class="ic">⚙️</span>Bot Settings</button>
-    </div>
-    <div class="rail-foot">
-      <div class="tbar-status" style="width:100%; justify-content:center;">
-        <div class="sdot" id="sdot-rail"></div>
-        <span id="stxt-rail">Offline</span>
-      </div>
-      <button class="tbtn" style="width:100%;" onclick="logout()">Logout</button>
-    </div>
-  </nav>
+  <!-- Top bar -->
+  <header class="tbar">
+    <button class="ham" id="ham" onclick="toggleSidebar()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="tbar-logo">⚡ Studio</span>
 
+    <!-- Desktop tabs -->
+    <nav class="tbar-tabs">
+      <button class="ttab on"     onclick="nav('library',this)">🗄 Library</button>
+      <button class="ttab"     onclick="nav('commands',this)">📦 Commands</button>
+      <button class="ttab"     onclick="nav('control',this)">🎮 Control</button>
+      <button class="ttab"     onclick="nav('logs',this)">📝 Logs</button>
+      <button class="ttab"     onclick="nav('settings',this)">⚙️ Settings</button>
+    </nav>
+
+    <div class="tbar-spacer"></div>
+    <div class="tbar-status">
+      <div class="sdot" id="sdot"></div>
+      <span id="stxt">Offline</span>
+    </div>
+    <button class="tbtn" onclick="logout()">Logout</button>
+  </header>
+
+  <!-- Body -->
   <div class="body-wrap">
-    <!-- Top bar (mobile: hamburger + logo; desktop: slim status strip) -->
-    <header class="tbar">
-      <button class="ham" id="ham" onclick="toggleSidebar()" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-      <span class="tbar-logo">⚡ Studio</span>
-
-      <div class="tbar-spacer"></div>
-      <div class="tbar-status">
-        <div class="sdot" id="sdot"></div>
-        <span id="stxt">Offline</span>
-      </div>
-      <button class="tbtn" onclick="logout()">Logout</button>
-    </header>
-
-    <!-- Body -->
     <div class="pages">
 
-      <!-- ── OVERVIEW ──────────────────────────────────────────────────── -->
-      <div class="pg on" id="pg-overview" style="flex-direction:column;">
-        <div class="pg-scroll">
-          <section class="hero-card">
-            <div>
-              <p class="eyebrow">Discord bot command center</p>
-              <h1 class="hero-title">Run, monitor, and customize your bot from one clean GUI.</h1>
-              <p class="hero-copy">Use the dashboard to start or restart the bot, review live logs, sync slash commands, and edit presence without touching a terminal.</p>
-              <div class="hero-actions">
-                <button class="sbtn pri" onclick="nav('control')">🎮 Open Controls</button>
-                <button class="sbtn" onclick="nav('commands')">⬆ Manage Commands</button>
-              </div>
-            </div>
-            <div class="hero-panel">
-              <div class="mini-status"><span class="sdot" id="sdot-hero"></span><span id="stxt-hero">Offline</span></div>
-              <div class="hero-stat"><strong id="sc-hero">—</strong><span>Commands</span></div>
-              <div class="hero-stat"><strong id="sg-hero">—</strong><span>Guilds</span></div>
-              <div class="hero-stat"><strong id="su-hero">—</strong><span>Uptime</span></div>
-            </div>
-          </section>
-
-          <div class="quick-grid">
-            <button class="quick-card" onclick="botStart()"><span>▶</span><strong>Start Bot</strong><small>Launch the Discord process</small></button>
-            <button class="quick-card" onclick="botRestart()"><span>🔄</span><strong>Restart</strong><small>Refresh command/runtime state</small></button>
-            <button class="quick-card" onclick="nav('logs')"><span>📝</span><strong>Live Logs</strong><small>Watch stdout and errors</small></button>
-            <button class="quick-card" onclick="nav('settings')"><span>🎭</span><strong>Presence</strong><small>Edit status and activity</small></button>
-          </div>
-
-          <section class="guide-card">
-            <h2>Recommended workflow</h2>
-            <ol>
-              <li>Sync command files into MongoDB from the Library page.</li>
-              <li>Upload or edit dashboard commands on the Commands page.</li>
-              <li>Start or restart the bot from Controls, then verify output in Logs.</li>
-            </ol>
-          </section>
-        </div>
-      </div>
-
       <!-- ── LIBRARY ────────────────────────────────────────────────────── -->
-      <div class="pg" id="pg-library" style="flex-direction:column;">
+      <div class="pg on" id="pg-library" style="flex-direction:column;">
         <div class="lib-toolbar">
           <h2>🗄 Command Library</h2>
           <span class="lib-info" id="sc-db">Loading…</span>
@@ -300,6 +248,10 @@ let TOK   = localStorage.getItem('bst');
 let pTimer = null;
 
 // ── TOAST ─────────────────────────────────────────────────────────────────
+// Was called throughout this file (sync, upload, delete, settings, danger
+// zone) but never defined — every one of those calls threw an uncaught
+// ReferenceError, which silently aborted whatever function called it
+// (e.g. leaving the Sync button stuck on "Syncing…" forever).
 function toast(message, kind = 'inf') {
   const container = document.getElementById('toasts');
   if (!container) return;
@@ -405,18 +357,8 @@ if (TOK) {
   });
 }
 
-// ── SIDEBAR (mobile drawer) ─────────────────────────────────────────────────
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('on');
-  document.getElementById('sov').classList.toggle('on');
-}
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('on');
-  document.getElementById('sov').classList.remove('on');
-}
-
 // ── NAV ────────────────────────────────────────────────────────────────────
-let activeNav = 'overview';
+let activeNav = 'library';
 function nav(id, btn) {
   activeNav = id;
   document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
@@ -424,14 +366,13 @@ function nav(id, btn) {
   document.querySelectorAll('.snav-item').forEach(b => b.classList.remove('on'));
   document.getElementById('pg-' + id).classList.add('on');
   if (btn) btn.classList.add('on');
-  // Sync both rail (desktop) and drawer (mobile) highlight regardless of which was clicked
-  document.querySelectorAll('.ttab, .snav-item').forEach(b => {
+  // Also sync sidebar highlight
+  document.querySelectorAll('.snav-item').forEach(b => {
     if (b.getAttribute('onclick')?.includes(`'${id}'`)) b.classList.add('on');
   });
   if (id === 'commands') loadCmds();
   if (id === 'control')  { loadStats(); loadLogFiles(); }
   if (id === 'library')  loadLibrary();
-  if (id === 'overview') { loadStats(); loadLogFiles(); }
   if (id === 'settings') loadSettings();
 }
 
@@ -452,20 +393,13 @@ async function tick() {
   try {
     const d = await api('/api/status').then(r => r.json());
     setStatus(d.status);
-    ['su', 'su-hero'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = fmtUp(d.uptime); });
+    document.getElementById('su').textContent = fmtUp(d.uptime);
   } catch (_) {}
 }
 function setStatus(s) {
   const on = s === 'running';
-  const label = on ? 'Online' : (s === 'stopping' ? 'Stopping…' : 'Offline');
-  ['sdot', 'sdot-rail', 'sdot-hero'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.className = 'sdot' + (on ? ' on' : '');
-  });
-  ['stxt', 'stxt-rail', 'stxt-hero'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = label;
-  });
+  document.getElementById('sdot').className = 'sdot' + (on ? ' on' : '');
+  document.getElementById('stxt').textContent = on ? 'Online' : (s === 'stopping' ? 'Stopping…' : 'Offline');
   document.getElementById('bs').disabled = on;
   document.getElementById('bx').disabled = !on;
   document.getElementById('br').disabled = !on;
@@ -473,17 +407,10 @@ function setStatus(s) {
 async function loadStats() {
   try {
     const d = await api('/api/stats').then(r => r.json());
-    const commandTotal = d.totalCommands ?? d.commands ?? '—';
-    document.getElementById('sc').textContent = commandTotal;
+    document.getElementById('sc').textContent = d.totalCommands ?? d.commands ?? '—';
     document.getElementById('sg').textContent = d.guilds;
     document.getElementById('sv').textContent = d.version;
     document.getElementById('su').textContent = fmtUp(d.uptime);
-    const scHero = document.getElementById('sc-hero');
-    const sgHero = document.getElementById('sg-hero');
-    const suHero = document.getElementById('su-hero');
-    if (scHero) scHero.textContent = commandTotal;
-    if (sgHero) sgHero.textContent = d.guilds;
-    if (suHero) suHero.textContent = fmtUp(d.uptime);
     const scdb = document.getElementById('sc-db');
     if (scdb) scdb.textContent = `${d.fileCommands ?? 0} file · ${d.dbCommands ?? 0} dashboard`;
   } catch (_) {}

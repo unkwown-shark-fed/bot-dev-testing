@@ -1,27 +1,23 @@
 # Code Analysis Report
 
-> Refreshed on 2026-07-30.
-
 ## Scope
-This analysis reviewed the core runtime, command-loading, dashboard-adjacent, and documentation paths of the bot:
+This analysis reviewed the core runtime and command-loading paths of the bot:
 - `index.js`
 - `db.js`
 - `utils/command-loader.js`
-- `dashboard/services/code-loader.js`
-- `scripts-code-quality.js`
 - project configuration/docs (`package.json`, `README.md`)
 
 ## High-Level Architecture
 - The bot uses `discord.js` with slash-command interactions and a `Collection`-based command registry.
-- Commands can be loaded from local files under `/commands` and from MongoDB dashboard records.
-- Dashboard command records marked `source: "dashboard"` are compiled dynamically.
-- `DB_ONLY_COMMANDS=true` allows deployments that rely entirely on MongoDB-backed dashboard command records.
+- Commands are loaded from two sources:
+  1. Local command files under `/commands`.
+  2. MongoDB dashboard records (`source: "dashboard"`) compiled dynamically.
 - Runtime metrics are tracked in-memory (`commandsExecuted`, `errors`, per-command usage).
 - Logging is split across local Winston logs and optional dashboard forwarding via `/api/log`.
 
 ## What Looks Good
 1. **Graceful command loading strategy**
-   - File commands and DB commands are merged while avoiding duplicate names.
+   - File commands and DB commands are merged, while avoiding duplicate names.
    - Invalid command modules are skipped with explicit warnings.
 
 2. **Operational resilience in non-critical paths**
@@ -29,15 +25,24 @@ This analysis reviewed the core runtime, command-loading, dashboard-adjacent, an
    - Interaction execution has robust fallback handling for reply/edit/follow-up states.
 
 3. **Basic observability built in**
-   - Per-command success/error accounting is tracked in memory.
-   - Guild join/leave and process-level error logging help with production diagnosis.
-
-4. **Repository quality workflow exists**
-   - `npm run quality:check` and `npm run quality:fix` provide a documented entry point for code-quality validation.
+   - Per-command success/error accounting.
+   - Guild join/leave and process-level error logging.
 
 ## Key Risks / Findings
 
-### 1) Dynamic DB command execution model has high trust requirements
+### 1) Critical runtime bug in `index.js`
+`fs` is used in the presence watcher (`fs.existsSync`, `fs.readFileSync`, `fs.unlinkSync`) but never imported in the module.
+
+**Impact**
+- The first interval tick can throw `ReferenceError: fs is not defined`.
+- Because the top-level interval callback starts with `if (!fs.existsSync(...))`, the error occurs before the internal `try/catch` block.
+- This can surface as an uncaught exception and destabilize the process.
+
+**Recommendation**
+- Add `const fs = require('fs');` near the top of `index.js`.
+- Optionally wrap the entire interval body in `try/catch` so no callback-level exception can escape.
+
+### 2) Dynamic DB command execution model has high trust requirements
 Dashboard commands are compiled/executed directly from DB code via `Module._compile`.
 
 **Impact**
@@ -48,38 +53,19 @@ Dashboard commands are compiled/executed directly from DB code via `Module._comp
 - Keep strict auth for dashboard endpoints.
 - Consider code signing, allow-listing APIs, or sandboxing if this project will be multi-operator.
 
-### 2) Automated verification should be expanded
-The repository has quality scripts, but there is still no dedicated `test` script for behavior-level coverage.
+### 3) Limited automated verification hooks
+`package.json` does not currently define `test`/lint/type-check scripts.
 
 **Impact**
-- Syntax/style issues are easier to catch than behavioral regressions in Discord interaction flows.
+- Regressions in critical startup paths (like missing imports) are easier to miss.
 
 **Recommendation**
-- Add focused unit or smoke tests for command loading, cooldown handling, and dashboard command compilation.
-- Add CI that runs `npm run quality:check` plus any future tests.
-
-### 3) Presence update file handling depends on local filesystem state
-The runtime watches `.presence_update.json` and applies updates when the file appears.
-
-**Impact**
-- This is simple and effective for single-process deployments.
-- It can be fragile in multi-instance or containerized deployments with ephemeral storage.
-
-**Recommendation**
-- Keep the current approach for single-instance deployments.
-- Use MongoDB or another shared coordination mechanism if multiple bot instances are deployed.
-
-## Resolved Findings
-
-### Missing `fs` import in `index.js`
-The previous report identified that `fs` was used in the presence watcher without being imported.
-`index.js` now imports `fs` at startup, so this specific runtime bug is resolved.
+- Add at least one CI-safe script (e.g., `node --check` across key files and a smoke load script for non-network modules).
 
 ## Suggested Prioritized Next Steps
-1. Add behavioral smoke tests for command loading and interaction execution fallbacks.
-2. Harden DB command execution controls if dashboard access is shared.
-3. Move presence-update coordination to shared storage before scaling beyond one bot process.
+1. **Fix missing `fs` import in `index.js` immediately** (high severity).
+2. Add minimal CI checks (`node --check` and lightweight smoke tests).
+3. Harden DB command execution controls if dashboard access is shared.
 
 ## Analyst Notes
-This report is intentionally focused on reliability and operational safety in startup/runtime paths
-rather than feature-level behavior of each command implementation.
+This report is intentionally focused on reliability and operational safety in startup/runtime paths rather than feature-level behavior of each command implementation.
