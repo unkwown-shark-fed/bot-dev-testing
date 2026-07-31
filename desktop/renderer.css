@@ -1,0 +1,31 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+body { margin: 0; }
+.shell { max-width: 1100px; margin: 0 auto; padding: 32px; }
+.hero { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin-bottom: 24px; }
+.eyebrow { color: #38bdf8; text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 800; }
+h1 { margin: 0 0 8px; font-size: 36px; }
+p { color: #94a3b8; }
+.status-card { display: grid; gap: 10px; padding: 18px; min-width: 220px; border: 1px solid #334155; border-radius: 18px; background: #111827; box-shadow: 0 18px 60px rgb(0 0 0 / .28); }
+.status-card strong { color: #facc15; }
+.panel { border: 1px solid #334155; border-radius: 18px; background: #111827; padding: 20px; margin-bottom: 18px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+label { display: grid; gap: 8px; color: #cbd5e1; font-weight: 700; }
+input { border: 1px solid #475569; border-radius: 12px; background: #020617; color: #f8fafc; padding: 12px 14px; font: inherit; }
+input:focus { outline: 2px solid #38bdf8; border-color: transparent; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+button { border: 0; border-radius: 999px; background: #334155; color: #f8fafc; padding: 11px 16px; font-weight: 800; cursor: pointer; }
+button:hover { background: #475569; }
+button.primary { background: linear-gradient(135deg, #2563eb, #7c3aed); }
+.panel-heading { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 12px; }
+h2 { margin: 0; }
+small { color: #94a3b8; }
+pre { margin: 0; min-height: 250px; max-height: 310px; overflow: auto; white-space: pre-wrap; background: #020617; border-radius: 14px; padding: 14px; color: #cbd5e1; }
+.log-error { color: #fca5a5; }
+.log-info { color: #a7f3d0; }
+@media (max-width: 760px) { .hero, .panel-heading { display: block; } .grid { grid-template-columns: 1fr; } }
