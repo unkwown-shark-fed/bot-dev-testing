@@ -32,7 +32,8 @@
   <div class="sidebar" id="sidebar">
     <div class="rail-logo"><span class="dot"></span>Bot Studio</div>
     <div class="sidebar-nav">
-      <div class="snav-item on" onclick="nav('library',this);closeSidebar()"><span class="si">🗄</span>Library</div>
+      <div class="snav-item on" onclick="nav('overview',this);closeSidebar()"><span class="si">✨</span>Overview</div>
+      <div class="snav-item"    onclick="nav('library',this);closeSidebar()"><span class="si">🗄</span>Library</div>
       <div class="snav-item"    onclick="nav('commands',this);closeSidebar()"><span class="si">📦</span>Commands</div>
       <div class="snav-item"    onclick="nav('control',this);closeSidebar()"><span class="si">🎮</span>Control</div>
       <div class="snav-item"    onclick="nav('logs',this);closeSidebar()"><span class="si">📝</span>Logs</div>
@@ -44,7 +45,8 @@
   <nav class="rail">
     <div class="rail-logo"><span class="dot"></span>Bot Studio</div>
     <div class="rail-nav">
-      <button class="ttab on" onclick="nav('library',this)"><span class="ic">🗄</span>Library</button>
+      <button class="ttab on" onclick="nav('overview',this)"><span class="ic">✨</span>Overview</button>
+      <button class="ttab"    onclick="nav('library',this)"><span class="ic">🗄</span>Library</button>
       <button class="ttab"    onclick="nav('commands',this)"><span class="ic">📦</span>Commands</button>
       <button class="ttab"    onclick="nav('control',this)"><span class="ic">🎮</span>Control</button>
       <button class="ttab"    onclick="nav('logs',this)"><span class="ic">📝</span>Logs</button>
@@ -78,8 +80,47 @@
     <!-- Body -->
     <div class="pages">
 
+      <!-- ── OVERVIEW ──────────────────────────────────────────────────── -->
+      <div class="pg on" id="pg-overview" style="flex-direction:column;">
+        <div class="pg-scroll">
+          <section class="hero-card">
+            <div>
+              <p class="eyebrow">Discord bot command center</p>
+              <h1 class="hero-title">Run, monitor, and customize your bot from one clean GUI.</h1>
+              <p class="hero-copy">Use the dashboard to start or restart the bot, review live logs, sync slash commands, and edit presence without touching a terminal.</p>
+              <div class="hero-actions">
+                <button class="sbtn pri" onclick="nav('control')">🎮 Open Controls</button>
+                <button class="sbtn" onclick="nav('commands')">⬆ Manage Commands</button>
+              </div>
+            </div>
+            <div class="hero-panel">
+              <div class="mini-status"><span class="sdot" id="sdot-hero"></span><span id="stxt-hero">Offline</span></div>
+              <div class="hero-stat"><strong id="sc-hero">—</strong><span>Commands</span></div>
+              <div class="hero-stat"><strong id="sg-hero">—</strong><span>Guilds</span></div>
+              <div class="hero-stat"><strong id="su-hero">—</strong><span>Uptime</span></div>
+            </div>
+          </section>
+
+          <div class="quick-grid">
+            <button class="quick-card" onclick="botStart()"><span>▶</span><strong>Start Bot</strong><small>Launch the Discord process</small></button>
+            <button class="quick-card" onclick="botRestart()"><span>🔄</span><strong>Restart</strong><small>Refresh command/runtime state</small></button>
+            <button class="quick-card" onclick="nav('logs')"><span>📝</span><strong>Live Logs</strong><small>Watch stdout and errors</small></button>
+            <button class="quick-card" onclick="nav('settings')"><span>🎭</span><strong>Presence</strong><small>Edit status and activity</small></button>
+          </div>
+
+          <section class="guide-card">
+            <h2>Recommended workflow</h2>
+            <ol>
+              <li>Sync command files into MongoDB from the Library page.</li>
+              <li>Upload or edit dashboard commands on the Commands page.</li>
+              <li>Start or restart the bot from Controls, then verify output in Logs.</li>
+            </ol>
+          </section>
+        </div>
+      </div>
+
       <!-- ── LIBRARY ────────────────────────────────────────────────────── -->
-      <div class="pg on" id="pg-library" style="flex-direction:column;">
+      <div class="pg" id="pg-library" style="flex-direction:column;">
         <div class="lib-toolbar">
           <h2>🗄 Command Library</h2>
           <span class="lib-info" id="sc-db">Loading…</span>
@@ -375,7 +416,7 @@ function closeSidebar() {
 }
 
 // ── NAV ────────────────────────────────────────────────────────────────────
-let activeNav = 'library';
+let activeNav = 'overview';
 function nav(id, btn) {
   activeNav = id;
   document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
@@ -390,6 +431,7 @@ function nav(id, btn) {
   if (id === 'commands') loadCmds();
   if (id === 'control')  { loadStats(); loadLogFiles(); }
   if (id === 'library')  loadLibrary();
+  if (id === 'overview') { loadStats(); loadLogFiles(); }
   if (id === 'settings') loadSettings();
 }
 
@@ -410,17 +452,17 @@ async function tick() {
   try {
     const d = await api('/api/status').then(r => r.json());
     setStatus(d.status);
-    document.getElementById('su').textContent = fmtUp(d.uptime);
+    ['su', 'su-hero'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = fmtUp(d.uptime); });
   } catch (_) {}
 }
 function setStatus(s) {
   const on = s === 'running';
   const label = on ? 'Online' : (s === 'stopping' ? 'Stopping…' : 'Offline');
-  ['sdot', 'sdot-rail'].forEach(id => {
+  ['sdot', 'sdot-rail', 'sdot-hero'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.className = 'sdot' + (on ? ' on' : '');
   });
-  ['stxt', 'stxt-rail'].forEach(id => {
+  ['stxt', 'stxt-rail', 'stxt-hero'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = label;
   });
@@ -431,10 +473,17 @@ function setStatus(s) {
 async function loadStats() {
   try {
     const d = await api('/api/stats').then(r => r.json());
-    document.getElementById('sc').textContent = d.totalCommands ?? d.commands ?? '—';
+    const commandTotal = d.totalCommands ?? d.commands ?? '—';
+    document.getElementById('sc').textContent = commandTotal;
     document.getElementById('sg').textContent = d.guilds;
     document.getElementById('sv').textContent = d.version;
     document.getElementById('su').textContent = fmtUp(d.uptime);
+    const scHero = document.getElementById('sc-hero');
+    const sgHero = document.getElementById('sg-hero');
+    const suHero = document.getElementById('su-hero');
+    if (scHero) scHero.textContent = commandTotal;
+    if (sgHero) sgHero.textContent = d.guilds;
+    if (suHero) suHero.textContent = fmtUp(d.uptime);
     const scdb = document.getElementById('sc-db');
     if (scdb) scdb.textContent = `${d.fileCommands ?? 0} file · ${d.dbCommands ?? 0} dashboard`;
   } catch (_) {}
