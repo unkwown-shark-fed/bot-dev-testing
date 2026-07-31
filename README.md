@@ -324,11 +324,6 @@ That installs dependencies and creates a **Discord Utility Bot GUI** shortcut on
 After that, open the bot with the Desktop shortcut or by double-clicking `run-bot-gui.bat`.
 See `DESKTOP_INSTALL.md` for the full step-by-step installation guide.
 
-### If you cannot download the repository
-
-See `DOWNLOAD_HELP.md` for alternate download options, including GitHub ZIP download,
-`git clone`, and the GitHub Actions artifact named **discord-utility-bot-desktop-gui**.
-
 From the desktop window you can:
 
 1. Enter and save your Discord token, client ID, guild IDs, MongoDB URI, dashboard password,
