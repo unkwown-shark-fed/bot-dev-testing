@@ -297,3 +297,47 @@ npm run logs    # Check main logs
 ---
 
 **Made with ❤️ for Discord community management**
+
+---
+
+## 🖥️ Desktop GUI Control Center
+
+A PC-friendly Electron launcher is included so you can run the bot without typing every command in a terminal.
+
+```bash
+# Install app dependencies, including the desktop GUI runtime
+npm install
+
+# Open the desktop control center
+npm run gui
+```
+
+### Windows desktop install
+
+For a PC-style install, use the included Windows launcher scripts:
+
+```bat
+install-windows.bat
+```
+
+That installs dependencies and creates a **Discord Utility Bot GUI** shortcut on your Desktop.
+After that, open the bot with the Desktop shortcut or by double-clicking `run-bot-gui.bat`.
+See `DESKTOP_INSTALL.md` for the full step-by-step installation guide.
+
+### If you cannot download the repository
+
+See `DOWNLOAD_HELP.md` for alternate download options, including GitHub ZIP download,
+`git clone`, and the GitHub Actions artifact named **discord-utility-bot-desktop-gui**.
+
+From the desktop window you can:
+
+1. Enter and save your Discord token, client ID, guild IDs, MongoDB URI, dashboard password,
+   and dashboard port into `.env`.
+2. Run `npm install` from inside the GUI if dependencies are missing.
+3. Deploy slash commands to Discord.
+4. Start or stop the bot process.
+5. Start, stop, and open the web dashboard.
+6. Watch live install, deploy, bot, and dashboard logs in one place.
+
+To make it feel like a normal installed PC app, create a shortcut that runs `npm run gui`
+from this project folder after Node.js is installed.
