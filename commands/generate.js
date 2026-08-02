@@ -92,7 +92,7 @@ function separator(spacing = 1) {
 
 function buildComponents(buttonRows, roleId, extraText) {
   const dayBlocks = MATCH_DATES.map(date => buildDayBlock(date)).join('\n');
-  const trimmedExtraText = extraText?.trim();
+  const trimmedExtraText = extraText?.trim().replace(/\\n/g, '\n');
 
   // Everything lives inside one top-level Container
   const containerChildren = [
