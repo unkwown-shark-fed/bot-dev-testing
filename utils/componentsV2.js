@@ -17,6 +17,8 @@
 const ComponentType = {
   Container: 17,
   TextDisplay: 10,
+  Thumbnail: 11,
+  MediaGallery: 12,
   Separator: 14,
 };
 
@@ -44,9 +46,27 @@ function container(components) {
   return { type: ComponentType.Container, components };
 }
 
+/**
+ * Build a Media Gallery component — displays one or more images/videos in a
+ * gallery grid. Use `attachment://filename.ext` URLs to show a file you're
+ * uploading alongside the message (same as embed.setImage, but for V2).
+ * @param {Array<{url: string, description?: string, spoiler?: boolean}>} items
+ */
+function mediaGallery(items) {
+  return {
+    type: ComponentType.MediaGallery,
+    items: items.map(i => ({
+      media: { url: i.url },
+      ...(i.description ? { description: i.description } : {}),
+      ...(i.spoiler ? { spoiler: true } : {}),
+    })),
+  };
+}
+
 module.exports = {
   ComponentType,
   textDisplay,
   separator,
   container,
+  mediaGallery,
 };
