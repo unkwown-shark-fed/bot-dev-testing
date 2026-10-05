@@ -1117,13 +1117,13 @@ module.exports = {
     name: 'report',
     description: 'Evaluate a staff role or a single member\'s contribution since a date',
     configure: builder => builder
-      .addRoleOption(o => o.setName('role').setDescription('Staff role to evaluate (omit if using "user")').setRequired(false))
-      .addUserOption(o => o.setName('user').setDescription('Single staff member to evaluate instead of a whole role').setRequired(false))
-      .addStringOption(o => o.setName('since').setDescription('Start date, format YYYY-MM-DD').setRequired(true))
-      .addStringOption(o => o.setName('channels').setDescription('Channels/threads to scan: mentions or IDs, space/comma-separated').setRequired(false))
-      .addChannelOption(o => o.setName('channel').setDescription('Single channel/thread to scan (ignored if "channels" is set; default: all)')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread, ChannelType.AnnouncementThread)
-        .setRequired(false)),
+  .addStringOption(o => o.setName('since').setDescription('Start date, format YYYY-MM-DD').setRequired(true))
+  .addRoleOption(o => o.setName('role').setDescription('Staff role to evaluate (omit if using "user")').setRequired(false))
+  .addUserOption(o => o.setName('user').setDescription('Single staff member to evaluate instead of a whole role').setRequired(false))
+  .addStringOption(o => o.setName('channels').setDescription('Channels/threads to scan: mentions or IDs, space/comma-separated').setRequired(false))
+  .addChannelOption(o => o.setName('channel').setDescription('Single channel/thread to scan (ignored if "channels" is set; default: all)')
+    .addChannelTypes(ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread, ChannelType.AnnouncementThread)
+    .setRequired(false)),
   }),
   restricted: false,
   cooldown: 60,
