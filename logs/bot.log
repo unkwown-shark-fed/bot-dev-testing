@@ -1,0 +1,57 @@
+2026-10-06 02:21:01 [WARN] [mee6rank] image card unavailable, using text layout: Cannot find module '@napi-rs/canvas'
+Require stack:
+- F:\bots\bot-main-published-main\utils\rankCard.js
+- F:\bots\bot-main-published-main\commands\mee6rank.js
+- F:\bots\bot-main-published-main\utils\command-loader.js
+- F:\bots\bot-main-published-main\deploy-commands.js
+2026-10-06 02:27:09 [WARN] [mee6rank] image card unavailable, using text layout: Cannot find module '@napi-rs/canvas'
+Require stack:
+- F:\bots\bot-main-published-main\utils\rankCard.js
+- F:\bots\bot-main-published-main\commands\mee6rank.js
+- F:\bots\bot-main-published-main\utils\command-loader.js
+- F:\bots\bot-main-published-main\deploy-commands.js
+2026-10-06 02:27:15 [WARN] [mee6rank] image card unavailable, using text layout: Cannot find module '@napi-rs/canvas'
+Require stack:
+- F:\bots\bot-main-published-main\utils\rankCard.js
+- F:\bots\bot-main-published-main\commands\mee6rank.js
+- F:\bots\bot-main-published-main\utils\command-loader.js
+- F:\bots\bot-main-published-main\index.js
+2026-10-06 02:27:15 [INFO] 📁 Loaded 33 file-based commands
+2026-10-06 02:27:16 [INFO] 📦 Loaded 0 dashboard commands from MongoDB
+2026-10-06 02:27:18 [INFO] ✅ Logged in as BGMI#2469
+2026-10-06 02:27:18 [INFO] 🌐 Serving 2 guild(s)
+2026-10-06 02:27:18 [INFO] 📊 Total commands ready: 33 — cleanup, createinvite, createpost, dms, edit, export, exportforumposts, exportinvites, exportmessages, exportuserhistory, fetchreactions, findids, generate, generate_v2, help, insights, joinedafter, mee6leaderboard, listusers, mee6rank, membertrend, ping, quote, react, reactafter, report, repost, rolemanage, say, serverinfo, status, summarize, userinfo
+2026-10-06 02:27:18 [INFO] 🟢 Presence set: online / Playing BGMI x BGMI LITE
+2026-10-06 02:27:31 [INFO] ✅ abh1nav. used /mee6rank in Abhinav's server
+2026-10-06 02:27:31 [WARN] Dashboard log request failed: fetch failed
+2026-10-06 02:28:08 [INFO] 🛑 Received SIGINT, shutting down gracefully...
+2026-10-06 02:28:27 [WARN] [mee6rank] image card unavailable, using text layout: Cannot find module '@napi-rs/canvas'
+Require stack:
+- F:\bots\bot-main-published-main\utils\rankCard.js
+- F:\bots\bot-main-published-main\commands\mee6rank.js
+- F:\bots\bot-main-published-main\utils\command-loader.js
+- F:\bots\bot-main-published-main\index.js
+2026-10-06 02:28:27 [INFO] 📁 Loaded 33 file-based commands
+2026-10-06 02:28:28 [INFO] 📦 Loaded 0 dashboard commands from MongoDB
+2026-10-06 02:28:30 [INFO] ✅ Logged in as BGMI#2469
+2026-10-06 02:28:30 [INFO] 🌐 Serving 2 guild(s)
+2026-10-06 02:28:30 [INFO] 📊 Total commands ready: 33 — cleanup, createinvite, createpost, dms, edit, export, exportforumposts, exportinvites, exportmessages, exportuserhistory, fetchreactions, findids, generate, generate_v2, help, insights, joinedafter, mee6leaderboard, listusers, mee6rank, membertrend, ping, quote, react, reactafter, report, repost, rolemanage, say, serverinfo, status, summarize, userinfo
+2026-10-06 02:28:30 [INFO] 🟢 Presence set: online / Playing BGMI x BGMI LITE
+2026-10-06 02:28:52 [INFO] 🛑 Received SIGINT, shutting down gracefully...
+2026-10-06 02:29:09 [INFO] 📁 Loaded 33 file-based commands
+2026-10-06 02:29:10 [INFO] 📦 Loaded 0 dashboard commands from MongoDB
+2026-10-06 02:29:12 [INFO] ✅ Logged in as BGMI#2469
+2026-10-06 02:29:12 [INFO] 🌐 Serving 2 guild(s)
+2026-10-06 02:29:12 [INFO] 📊 Total commands ready: 33 — cleanup, createinvite, createpost, dms, edit, export, exportforumposts, exportinvites, exportmessages, exportuserhistory, fetchreactions, findids, generate, generate_v2, help, insights, joinedafter, mee6leaderboard, listusers, mee6rank, membertrend, ping, quote, react, reactafter, report, repost, rolemanage, say, serverinfo, status, summarize, userinfo
+2026-10-06 02:29:12 [INFO] 🟢 Presence set: online / Playing BGMI x BGMI LITE
+2026-10-06 02:29:25 [INFO] ✅ abh1nav. used /mee6rank in Abhinav's server
+2026-10-06 02:29:25 [WARN] Dashboard log request failed: fetch failed
+2026-10-06 02:30:21 [INFO] 🛑 Received SIGINT, shutting down gracefully...
+2026-10-06 02:30:23 [INFO] 📁 Loaded 33 file-based commands
+2026-10-06 02:30:24 [INFO] 📦 Loaded 0 dashboard commands from MongoDB
+2026-10-06 02:30:26 [INFO] ✅ Logged in as BGMI#2469
+2026-10-06 02:30:26 [INFO] 🌐 Serving 2 guild(s)
+2026-10-06 02:30:26 [INFO] 📊 Total commands ready: 33 — cleanup, createinvite, createpost, dms, edit, export, exportforumposts, exportinvites, exportmessages, exportuserhistory, fetchreactions, findids, generate, generate_v2, help, insights, joinedafter, mee6leaderboard, listusers, mee6rank, membertrend, ping, quote, react, reactafter, report, repost, rolemanage, say, serverinfo, status, summarize, userinfo
+2026-10-06 02:30:26 [INFO] 🟢 Presence set: online / Playing BGMI x BGMI LITE
+2026-10-06 02:30:34 [INFO] ✅ abh1nav. used /mee6rank in Abhinav's server
+2026-10-06 02:30:34 [WARN] Dashboard log request failed: fetch failed

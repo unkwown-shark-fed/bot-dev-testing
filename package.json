@@ -28,6 +28,7 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.10",
     "csv-stringify": "^6.0.0",
     "discord.js": "^14.11.0",
     "dotenv": "^16.3.1",

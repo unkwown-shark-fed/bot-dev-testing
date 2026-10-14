@@ -22,6 +22,7 @@ const {
   progressBar,
   rewardInfo,
 } = require('../utils/mee6');
+const EPHEMERAL = false; // set to false for public replies
 
 // Requires discord.js >= 14.19 (Components V2) and Node 18+.
 
@@ -134,7 +135,9 @@ module.exports = {
   async execute(interaction) {
     if (!(await ensureOwner(interaction))) return;
 
-    await interaction.deferReply();
+    await interaction.deferReply({
+  flags: EPHEMERAL ? MessageFlags.Ephemeral : undefined,
+});
 
     const target = interaction.options.getUser('user') || interaction.user;
 

@@ -172,7 +172,7 @@ module.exports = {
   async execute(interaction) {
     if (!(await ensureOwner(interaction))) return;
 
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const minLevel = interaction.options.getInteger('min_level') ?? DEFAULT_MIN_LEVEL;
     const viewerId = interaction.user.id;
