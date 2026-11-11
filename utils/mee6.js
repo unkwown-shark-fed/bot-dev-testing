@@ -190,6 +190,35 @@ async function findPlayer(userId) {
   return null;
 }
 
+// Like findPlayer, but ranks only among players whose IDs are in roleMemberIds
+// (a Set of Discord user IDs). `rank` is the position within that group.
+// Returns null if the user isn't in the top MAX_API_PAGES * 100 of the leaderboard.
+async function findRoleRank(userId, roleMemberIds) {
+  let stale = false;
+  let position = 0;
+
+  for (let apiPage = 0; apiPage < MAX_API_PAGES; apiPage++) {
+    const data = await fetchApiPage(apiPage);
+    stale = stale || !!data.__stale;
+
+    for (const p of data.players) {
+      if (!roleMemberIds.has(p.id)) continue;
+      position++;
+      if (p.id === String(userId)) {
+        return {
+          player: p,
+          rank: position,
+          guild: data.guild || {},
+          roleRewards: data.role_rewards || [],
+          stale,
+        };
+      }
+    }
+    if (data.players.length < API_LIMIT) break;
+  }
+  return null;
+}
+
 // ---- Formatting helpers ------------------------------------------------
 const esc = (s) => String(s).replace(/([\\*_`~|>#-])/g, '\\$1');
 const fmt = (n) => Number(n).toLocaleString('en-US');
@@ -229,6 +258,7 @@ module.exports = {
   fetchApiPage,
   getQualifying,
   findPlayer,
+  findRoleRank,
   esc,
   fmt,
   avatarUrl,

@@ -1,117 +1,175 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { createCommandBuilder, createEmbed } = require('../utils/builders');
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  AttachmentBuilder,
+  MessageFlags,
+} = require('discord.js');
+
+const PER_PAGE = 20;
+const CHUNK_LIMIT = 1900; // leave room for code block fences (2000 max)
+const MAX_CHUNK_MESSAGES = 5; // the .txt file always has everything
+
+// Split a list of strings into code-block-sized chunks
+function chunkLines(lines) {
+  const chunks = [];
+  let current = '';
+  for (const line of lines) {
+    if (current.length + line.length + 1 > CHUNK_LIMIT) {
+      chunks.push(current);
+      current = '';
+    }
+    current += (current ? '\n' : '') + line;
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
 
 module.exports = {
-  category: 'Search',
-  restricted: true,
-  data: createCommandBuilder({
-    name: 'listusers',
-    description: 'Show a paginated list of server users in a specific role (username and ID).',
-    configure: builder => builder.addRoleOption(o => o.setName('role').setDescription('Role to list members of').setRequired(true)),
-  }),
-  cooldown: 10,
-  /**
-   * @param {import('discord.js').CommandInteraction} interaction
-   */
+  data: new SlashCommandBuilder()
+    .setName('listusers')
+    .setDescription('List members with a role, with copyable user IDs')
+    .addRoleOption((o) =>
+      o.setName('role').setDescription('Role to list').setRequired(true)
+    )
+    .addBooleanOption((o) =>
+      o.setName('include_bots').setDescription('Include bots (default: false)')
+    )
+    .addBooleanOption((o) =>
+      o
+        .setName('public')
+        .setDescription('Show the result to everyone (default: only you)')
+    )
+    .setDMPermission(false),
+
   async execute(interaction) {
-    const guild = interaction.guild;
-    if (!guild) {
-      return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
-    }
-
     const role = interaction.options.getRole('role');
-    if (!role) return interaction.reply({ content: 'Role not found or not provided.', ephemeral: true });
+    const includeBots = interaction.options.getBoolean('include_bots') ?? false;
+    const isPublic = interaction.options.getBoolean('public') ?? false;
 
-    await interaction.deferReply();
+    await interaction.deferReply({
+      flags: isPublic ? undefined : MessageFlags.Ephemeral,
+    });
 
-    let membersWithRoleArray;
-    let usedCache = false;
-
+    // Only hit the API if the member cache is incomplete (Server Members Intent required)
     try {
-      // Attempt to fetch all guild members (requires Server Members intent)
-      const allMembers = await guild.members.fetch();
-      membersWithRoleArray = Array.from(allMembers.values()).filter(m => m.roles.cache.has(role.id));
-    } catch (err) {
-      // Fallback to cached members (may be partial)
-      console.warn('guild.members.fetch() failed, falling back to role.members cache:', err);
-      usedCache = true;
-      const cached = role.members; // Collection of GuildMembers that have this role in cache
-      if (!cached || cached.size === 0) {
-        return interaction.editReply({
-          content:
-            'Failed to fetch members. Ensure the bot has the "Server Members Intent" enabled in the Developer Portal and the GuildMembers intent in your client.',
-        });
+      const { guild } = interaction;
+      if (guild.members.cache.size < guild.memberCount) {
+        await guild.members.fetch();
       }
-      membersWithRoleArray = Array.from(cached.values());
+    } catch (err) {
+      return interaction.editReply(
+        'Could not fetch members. Make sure the Server Members Intent is enabled.'
+      );
     }
 
-    // Map to "username#discriminator (id)" and sort alphabetically
-    const memberList = membersWithRoleArray
-      .map((m) => `${m.user.tag} (\`${m.id}\`)`)
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const fresh = interaction.guild.roles.cache.get(role.id);
+    const members = [...(fresh?.members.values() ?? [])]
+      .filter((m) => includeBots || !m.user.bot)
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-    if (memberList.length === 0) {
-      return interaction.editReply({ content: `No members found with the role ${role.name}.` });
+    if (members.length === 0) {
+      return interaction.editReply(`No members have ${role}.`);
     }
 
-    const pageSize = 10;
-    const pages = [];
-    for (let i = 0; i < memberList.length; i += pageSize) {
-      pages.push(memberList.slice(i, i + pageSize));
-    }
-    let current = 0;
+    const ids = members.map((m) => m.id);
+    const totalPages = Math.ceil(members.length / PER_PAGE);
+    let page = 0;
 
-    const buildEmbed = (pageIndex) => {
-      return createEmbed({
-        title: `${guild.name} — Members with role: ${role.name}`,
-        description: pages[pageIndex].join('\n'),
-        timestamp: false,
-      }).setFooter({
-          text: `Page ${pageIndex + 1} / ${pages.length} • ${memberList.length} members${usedCache ? ' (partial - cache used)' : ''}`,
+    const buildEmbed = () => {
+      const start = page * PER_PAGE;
+      const lines = members
+        .slice(start, start + PER_PAGE)
+        .map((m, i) => `${start + i + 1}. ${m} - \`${m.id}\``);
+      return new EmbedBuilder()
+        .setTitle(`Members with ${role.name}`)
+        .setColor(role.color || 0x5865f2)
+        .setDescription(lines.join('\n'))
+        .setFooter({
+          text: `Page ${page + 1}/${totalPages} • ${members.length} member(s)`,
         });
     };
 
-    const prevBtn = new ButtonBuilder().setCustomId('prev').setLabel('Prev').setStyle(ButtonStyle.Primary).setDisabled(true);
-    const nextBtn = new ButtonBuilder()
-      .setCustomId('next')
-      .setLabel('Next')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(pages.length <= 1);
-    const closeBtn = new ButtonBuilder().setCustomId('close').setLabel('Close').setStyle(ButtonStyle.Danger);
+    const buildRows = (disabled = false) => {
+      const nav = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('lu_prev')
+          .setLabel('Prev')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(disabled || page === 0),
+        new ButtonBuilder()
+          .setCustomId('lu_next')
+          .setLabel('Next')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(disabled || page >= totalPages - 1)
+      );
+      const copy = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('lu_copy_page')
+          .setLabel('Copy IDs (this page)')
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(disabled),
+        new ButtonBuilder()
+          .setCustomId('lu_copy_all')
+          .setLabel(`Copy all IDs (${ids.length})`)
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(disabled)
+      );
+      return totalPages > 1 ? [nav, copy] : [copy];
+    };
 
-    const row = new ActionRowBuilder().addComponents(prevBtn, nextBtn, closeBtn);
+    const message = await interaction.editReply({
+      embeds: [buildEmbed()],
+      components: buildRows(),
+      allowedMentions: { parse: [] }, // never ping when listing
+    });
 
-    const reply = await interaction.editReply({ embeds: [buildEmbed(current)], components: [row] });
-
-    const filter = (i) => ['prev', 'next', 'close'].includes(i.customId) && i.user.id === interaction.user.id;
-    const collector = reply.createMessageComponentCollector({ filter, time: 120000 });
+    const collector = message.createMessageComponentCollector({
+      filter: (i) => i.user.id === interaction.user.id,
+      time: 300_000,
+    });
 
     collector.on('collect', async (i) => {
-      try {
-        if (i.customId === 'prev') current = Math.max(0, current - 1);
-        if (i.customId === 'next') current = Math.min(pages.length - 1, current + 1);
-        if (i.customId === 'close') {
-          collector.stop('closed');
-          await i.update({ content: 'Closed.', embeds: [], components: [] });
-          return;
-        }
+      if (i.customId === 'lu_prev' || i.customId === 'lu_next') {
+        page += i.customId === 'lu_next' ? 1 : -1;
+        return i.update({ embeds: [buildEmbed()], components: buildRows() });
+      }
 
-        prevBtn.setDisabled(current === 0);
-        nextBtn.setDisabled(current === pages.length - 1);
+      // Copy buttons: reply privately with ID(s) in code blocks (tap/click to copy)
+      const list =
+        i.customId === 'lu_copy_page'
+          ? ids.slice(page * PER_PAGE, (page + 1) * PER_PAGE)
+          : ids;
 
-        await i.update({ embeds: [buildEmbed(current)], components: [row] });
-      } catch (err) {
-        console.error('Pagination update error:', err);
+      const chunks = chunkLines(list);
+      const shown = chunks.slice(0, MAX_CHUNK_MESSAGES);
+      const file = new AttachmentBuilder(Buffer.from(list.join('\n'), 'utf8'), {
+        name: `${role.name.replace(/[^\w-]+/g, '_')}_ids.txt`,
+      });
+
+      await i.reply({
+        content:
+          `**${list.length} ID(s)**, one per line` +
+          (chunks.length > shown.length
+            ? ` (showing first ${shown.length} message(s); the file has all of them)`
+            : '') +
+          `\n\`\`\`\n${shown[0]}\n\`\`\``,
+        files: [file],
+        flags: MessageFlags.Ephemeral,
+      });
+
+      for (const chunk of shown.slice(1)) {
+        await i.followUp({
+          content: `\`\`\`\n${chunk}\n\`\`\``,
+          flags: MessageFlags.Ephemeral,
+        });
       }
     });
 
-    collector.on('end', (_, reason) => {
-      if (reason !== 'closed') {
-        prevBtn.setDisabled(true);
-        nextBtn.setDisabled(true);
-        closeBtn.setDisabled(true);
-        reply.edit({ components: [row] }).catch(() => {});
-      }
+    collector.on('end', () => {
+      interaction.editReply({ components: buildRows(true) }).catch(() => {});
     });
   },
 };

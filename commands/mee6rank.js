@@ -22,7 +22,16 @@ const {
   progressBar,
   rewardInfo,
 } = require('../utils/mee6');
-const EPHEMERAL = false; // set to false for public replies
+
+const EPHEMERAL = false; // set to true for private replies
+
+// Roles allowed to use the command (set MEE6RANK_ROLE_ID in .env, comma-separated
+// for several roles). Read at call time so it works however/whenever dotenv is loaded.
+const getRoleIds = () =>
+  (process.env.MEE6RANK_ROLE_ID || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 // Requires discord.js >= 14.19 (Components V2) and Node 18+.
 
@@ -48,7 +57,7 @@ const gap = () =>
 
 const text = (content) => new TextDisplayBuilder().setContent(content);
 
-function buildView({ player, rank, guild, roleRewards, stale }) {
+function buildView({ player, rank, guild, roleRewards, stale, roleName }) {
   const { current, next } = rewardInfo(player.level, roleRewards);
   const { into, needed, pct } = levelProgress(player);
 
@@ -58,7 +67,7 @@ function buildView({ player, rank, guild, roleRewards, stale }) {
   // ---- Header -------------------------------------------------------------
   const identity = [
     current ? `**${esc(current.role.name)}**` : null,
-    `Rank **#${fmt(rank)}**`,
+    `Rank **#${fmt(rank)}**${roleName ? ` in ${esc(roleName)}` : ''}`,
     `Level **${player.level}**`,
   ]
     .filter(Boolean)
@@ -133,14 +142,38 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    if (!(await ensureOwner(interaction))) return;
+    const roleIds = getRoleIds();
+
+    // ---- Access control ----
+    // Roles configured: owner OR members with ANY of those roles may use the command.
+    // No roles configured: owner-only (original behaviour).
+    if (roleIds.length) {
+      const ownerIds = (process.env.BOT_OWNER_ID || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const isOwner = ownerIds.includes(interaction.user.id);
+      const hasRole =
+        interaction.inGuild() &&
+        roleIds.some((id) => interaction.member.roles.cache.has(id));
+
+      if (!isOwner && !hasRole) {
+        return interaction.reply({
+          content: '🔒 You need the required role to use this command.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    } else if (!(await ensureOwner(interaction))) {
+      return;
+    }
 
     await interaction.deferReply({
-  flags: EPHEMERAL ? MessageFlags.Ephemeral : undefined,
-});
+      flags: EPHEMERAL ? MessageFlags.Ephemeral : undefined,
+    });
 
     const target = interaction.options.getUser('user') || interaction.user;
 
+    // Anyone allowed to run the command can look up any member (server-wide rank).
     let result;
     try {
       result = await findPlayer(target.id);
