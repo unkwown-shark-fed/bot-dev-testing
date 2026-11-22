@@ -389,12 +389,16 @@ client.on('interactionCreate', async interaction => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton() && !interaction.isModalSubmit()) return;
 
-  const cmd = client.commands.get('createpost');
+  // Route by customId prefix: art contest vote buttons -> /artcontest,
+  // everything else -> /createpost (bulk posting sessions).
+  const isArtVote = interaction.isButton() && interaction.customId.startsWith('artvote:');
+  const cmdName = isArtVote ? 'artcontest' : 'createpost';
+  const cmd = client.commands.get(cmdName);
   if (cmd?.handleComponent) {
     try {
       await cmd.handleComponent(interaction, client, logger);
     } catch (err) {
-      logger.error(`createpost handleComponent error: ${err.message}`);
+      logger.error(`${cmdName} handleComponent error: ${err.message}`);
     }
   }
 });

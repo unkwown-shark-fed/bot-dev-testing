@@ -58,7 +58,8 @@ function messageToCsvRowMinimal(msg) {
     escapeCsv(discordUserIdText),
     escapeCsv(discordUsername),
     escapeCsv(gameUid),
-    escapeCsv(content)
+    escapeCsv(content),
+    escapeCsv(`'${msg.id}`)
   ].join(',');
 }
 
@@ -172,7 +173,7 @@ async function fetchMessagesBetween(channel, startId, endId) {
 }
 
 async function buildCsvForMessages(messages) {
-  const header = ['discord_user_id', 'discord_username', 'game_uid', 'message_content'];
+  const header = ['discord_user_id', 'discord_username', 'game_uid', 'message_content', 'message_id'];
   const rows = [ header.map(escapeCsv).join(',') ];
 
   messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
@@ -224,7 +225,7 @@ module.exports = {
       }
 
       if (!messages.length) {
-        const emptyCsv = (['discord_user_id', 'discord_username', 'game_uid', 'message_content'].map(escapeCsv).join(','));
+        const emptyCsv = (['discord_user_id', 'discord_username', 'game_uid', 'message_content', 'message_id'].map(escapeCsv).join(','));
         const emptyPath = path.join(outputDir, `export_empty_${targetChannel.id}_${Date.now()}.csv`);
         fs.writeFileSync(emptyPath, '\uFEFF' + emptyCsv, 'utf8');
         const emptyBuffer = fs.readFileSync(emptyPath);
